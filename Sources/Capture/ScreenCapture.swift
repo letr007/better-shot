@@ -76,6 +76,11 @@ final class ScreenCapture {
             textRequest.recognitionLevel = .accurate
             textRequest.usesLanguageCorrection = true
 
+            let preferredLanguages = ["zh-Hans", "zh-Hant", "en-US"]
+            if let supportedLanguages = try? textRequest.supportedRecognitionLanguages() {
+                textRequest.recognitionLanguages = preferredLanguages.filter(supportedLanguages.contains)
+            }
+
             let barcodeRequest = VNDetectBarcodesRequest()
 
             let handler = VNImageRequestHandler(cgImage: image)

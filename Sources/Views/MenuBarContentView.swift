@@ -113,7 +113,7 @@ struct MenuBarContentView: View {
                 dismissAndRun(.fullscreen)
             }
 
-            TrayGridButton(title: L10n.string("Window"), icon: "macwindow") {
+            TrayGridButton(title: L10n.string("Window"), icon: "macwindow", shortcut: "\u{2318}\u{21E7}5") {
                 dismissAndRun(.window)
             }
 

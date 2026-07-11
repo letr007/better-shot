@@ -612,6 +612,7 @@ struct CaptureSettingsTab: View {
                 VStack(alignment: .leading, spacing: 8) {
                     ShortcutRow(label: "Region", action: .region)
                     ShortcutRow(label: "Fullscreen", action: .fullscreen)
+                    ShortcutRow(label: "Window", action: .window)
                     ShortcutRow(label: "OCR Region", action: .ocr)
                     ShortcutRow(label: "Color Picker", action: .colorPicker)
                     ShortcutRow(label: "Record Screen", action: .recording)
@@ -623,10 +624,10 @@ struct CaptureSettingsTab: View {
                         let def: ShortcutService.Shortcut? = switch action {
                         case .region: .defaultRegion
                         case .fullscreen: .defaultFullscreen
+                        case .window: .defaultWindow
                         case .ocr: .defaultOCR
                         case .colorPicker: .defaultColorPicker
                         case .recording: .defaultRecording
-                        case .window: nil
                         }
                         if let def {
                             ShortcutService.shared.saveShortcut(def, for: action)
@@ -647,10 +648,10 @@ struct CaptureSettingsTab: View {
                         let def: ShortcutService.Shortcut? = switch action {
                         case .region: .defaultRegion
                         case .fullscreen: .defaultFullscreen
+                        case .window: .defaultWindow
                         case .ocr: .defaultOCR
                         case .colorPicker: .defaultColorPicker
                         case .recording: .defaultRecording
-                        case .window: nil
                         }
                         if let def {
                             ShortcutService.shared.saveShortcut(def, for: action)
@@ -791,7 +792,7 @@ struct ShortcutRow: View {
         switch action {
         case .region: return .defaultRegion
         case .fullscreen: return .defaultFullscreen
-        case .window: return ShortcutService.Shortcut(keyCode: 0, modifiers: 0, enabled: false)
+        case .window: return .defaultWindow
         case .ocr: return .defaultOCR
         case .colorPicker: return .defaultColorPicker
         case .recording: return .defaultRecording
