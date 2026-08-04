@@ -50,6 +50,7 @@
 "Exported" = "Exported";
 "Format" = "Format";
 "Frame Rate" = "Frame Rate";
+"Freeze & Select" = "Freeze & Select";
 "Full Screen" = "Full Screen";
 "Fullscreen" = "Fullscreen";
 "General" = "General";
@@ -92,6 +93,7 @@
 "Recording exported!" = "Recording exported!";
 "Recordings" = "Recordings";
 "Region" = "Region";
+"Region Selection Mode" = "Region Selection Mode";
 "Reset" = "Reset";
 "Reset All Capture Settings to Defaults" = "Reset All Capture Settings to Defaults";
 "Reset All General Settings to Defaults" = "Reset All General Settings to Defaults";
@@ -189,6 +191,7 @@
 "Spotlight" = "Spotlight";
 "Straight line" = "Straight line";
 "System" = "System";
+"System Select" = "System Select";
 "Text copied to clipboard" = "Text copied to clipboard";
 "Text" = "Text";
 "Turquoise" = "Turquoise";

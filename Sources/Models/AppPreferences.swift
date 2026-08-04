@@ -17,6 +17,7 @@ enum AppPreferences {
     private static let recordingShowCursorKey = "bs_recordingShowCursor"
     private static let recordingCaptureAudioKey = "bs_recordingCaptureAudio"
     private static let recordingOpenEditorKey = "bs_recordingOpenEditor"
+    private static let regionCaptureModeKey = "bs_regionCaptureMode"
 
     // MARK: - Appearance
     static var appearance: AppAppearance {
@@ -118,6 +119,16 @@ enum AppPreferences {
         set { UserDefaults.standard.set(newValue, forKey: recordingOpenEditorKey) }
     }
 
+    // MARK: - Region Capture
+    static var regionCaptureMode: RegionCaptureMode {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: regionCaptureModeKey),
+                  let mode = RegionCaptureMode(rawValue: raw) else { return .frozen }
+            return mode
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: regionCaptureModeKey) }
+    }
+
     // MARK: - Default Beautifier Config
     static var defaultBeautifierConfig: BeautifierConfig {
         get {
@@ -179,6 +190,20 @@ enum ExportFormat: String, CaseIterable {
         switch self {
         case .png: return "png"
         case .jpeg: return "jpg"
+        }
+    }
+}
+
+enum RegionCaptureMode: String, CaseIterable, Identifiable {
+    case frozen = "frozen"
+    case system = "system"
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .frozen: return L10n.string("Freeze & Select")
+        case .system: return L10n.string("System Select")
         }
     }
 }

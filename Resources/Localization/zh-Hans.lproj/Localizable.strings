@@ -50,6 +50,7 @@
 "Exported" = "已导出";
 "Format" = "格式";
 "Frame Rate" = "帧率";
+"Freeze & Select" = "定格后框选";
 "Full Screen" = "全屏";
 "Fullscreen" = "全屏";
 "General" = "通用";
@@ -92,6 +93,7 @@
 "Recording exported!" = "录屏已导出！";
 "Recordings" = "录屏";
 "Region" = "区域";
+"Region Selection Mode" = "区域截图模式";
 "Reset" = "重置";
 "Reset All Capture Settings to Defaults" = "恢复所有截图设置默认值";
 "Reset All General Settings to Defaults" = "恢复所有通用设置默认值";
@@ -189,6 +191,7 @@
 "Spotlight" = "聚光灯";
 "Straight line" = "直线";
 "System" = "跟随系统";
+"System Select" = "系统框选";
 "Text copied to clipboard" = "文本已复制到剪贴板";
 "Text" = "文本";
 "Turquoise" = "青绿色";

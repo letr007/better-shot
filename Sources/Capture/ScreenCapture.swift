@@ -26,6 +26,29 @@ final class ScreenCapture {
         return URL(fileURLWithPath: tempPath)
     }
 
+    // MARK: - Frozen Frame (non-interactive full-screen grab for freeze-then-select region capture)
+
+    func captureFrozenFrame(on screen: NSScreen?) async throws -> URL? {
+        guard !isCapturing else { return nil }
+        isCapturing = true
+        defer { isCapturing = false }
+
+        try? await Task.sleep(for: .milliseconds(200))
+
+        let targetScreen = screen
+            ?? NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }
+            ?? NSScreen.main
+
+        guard let displayID = targetScreen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+            return nil
+        }
+
+        let tempPath = makeTempPath()
+        let success = await runScreencapture(["-D", "\(displayID.intValue)", "-x", "-t", "png", tempPath])
+        guard success, FileManager.default.fileExists(atPath: tempPath) else { return nil }
+        return URL(fileURLWithPath: tempPath)
+    }
+
     // MARK: - Region
 
     func captureRegion() async throws -> URL? {

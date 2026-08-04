@@ -34,7 +34,11 @@ final class CaptureOrchestrator {
     private func executeCapture(_ action: ShortcutService.Action) async {
         switch action {
         case .region:
-            await captureAndProcess { try await ScreenCapture.shared.captureRegion() }
+            if AppPreferences.regionCaptureMode == .frozen {
+                await captureRegionFrozen(on: captureScreen)
+            } else {
+                await captureAndProcess { try await ScreenCapture.shared.captureRegion() }
+            }
         case .fullscreen:
             await captureAndProcess { try await ScreenCapture.shared.captureFullscreen() }
         case .window:
@@ -74,6 +78,80 @@ final class CaptureOrchestrator {
         }
     }
 
+
+    /// Freeze-then-select region capture: grab a non-interactive full-screen frame,
+    /// let the user pick a region on the frozen image, then crop and process.
+    private func captureRegionFrozen(on screen: NSScreen?) async {
+        let delay = AppPreferences.selfTimerDelay
+        if delay != .off {
+            await CountdownOverlay.shared.showCountdown(seconds: delay.rawValue)
+        }
+
+        let targetScreen = screen
+            ?? NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }
+            ?? NSScreen.main
+        guard let targetScreen else { return }
+
+        guard let url = try? await ScreenCapture.shared.captureFrozenFrame(on: targetScreen) else {
+            print("Capture failed: could not grab frozen frame")
+            return
+        }
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        guard let image = NSImage(contentsOf: url),
+              let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
+
+        let overlay = RegionSelectionOverlay()
+        guard let selection = await overlay.selectRegion(over: image, screens: [targetScreen]) else { return }
+
+        // Map the on-screen selection (points, bottom-left origin) to pixels (top-left origin).
+        let scale = CGFloat(cgImage.width) / targetScreen.frame.width
+        let frame = targetScreen.frame
+        let rawRect = CGRect(
+            x: selection.localRect.minX * scale,
+            y: (frame.height - selection.localRect.maxY) * scale,
+            width: selection.localRect.width * scale,
+            height: selection.localRect.height * scale
+        )
+        let maxX = min(rawRect.maxX, CGFloat(cgImage.width))
+        let maxY = min(rawRect.maxY, CGFloat(cgImage.height))
+        let minX = max(0, min(rawRect.minX, maxX - 1))
+        let minY = max(0, min(rawRect.minY, maxY - 1))
+        let cropRect = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY).integral
+
+        guard let cropped = cgImage.cropping(to: cropRect),
+              let tempURL = writePNGToTemp(cropped) else { return }
+
+        ScreenCapture.shared.playShutterSound()
+
+        guard let record = HistoryStore.shared.importCapture(from: tempURL) else {
+            print("Capture failed: could not import capture")
+            try? FileManager.default.removeItem(at: tempURL)
+            return
+        }
+        let capturedURL = HistoryStore.shared.urlForRecord(record)
+        lastCaptureURL = capturedURL
+        try? FileManager.default.removeItem(at: tempURL)
+
+        await galleryApplyAndSave(capturedURL, recordID: record.id)
+    }
+
+    private func writePNGToTemp(_ cgImage: CGImage) -> URL? {
+        let dir = NSTemporaryDirectory()
+        let stamp = Int(Date().timeIntervalSince1970 * 1000)
+        let path = "\(dir)bettershot_\(stamp).png"
+        let url = URL(fileURLWithPath: path)
+
+        guard let destination = CGImageDestinationCreateWithURL(
+            url as CFURL,
+            "public.png" as CFString,
+            1, nil
+        ) else { return nil }
+
+        CGImageDestinationAddImage(destination, cgImage, nil)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return url
+    }
 
     private func performColorPick() async {
         let overlay = ColorPickerOverlay()

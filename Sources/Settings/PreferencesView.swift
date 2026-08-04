@@ -564,12 +564,20 @@ struct CaptureSettingsTab: View {
     @AppStorage("bs_selfTimerDelay") private var selfTimerRaw: Int = 0
     @AppStorage("bs_overlayPosition") private var overlayPositionRaw: String = OverlayPosition.bottomRight.rawValue
     @AppStorage("bs_overlayDismissDelay") private var overlayDismissDelay: Double = 5.0
+    @AppStorage("bs_regionCaptureMode") private var regionCaptureModeRaw: String = RegionCaptureMode.frozen.rawValue
     @State private var shortcutResetID = UUID()
 
     private var selfTimerDelay: Binding<SelfTimerDelay> {
         Binding(
             get: { SelfTimerDelay(rawValue: selfTimerRaw) ?? .off },
             set: { selfTimerRaw = $0.rawValue }
+        )
+    }
+
+    private var regionCaptureMode: Binding<RegionCaptureMode> {
+        Binding(
+            get: { RegionCaptureMode(rawValue: regionCaptureModeRaw) ?? .frozen },
+            set: { regionCaptureModeRaw = $0.rawValue }
         )
     }
 
@@ -582,6 +590,15 @@ struct CaptureSettingsTab: View {
 
     var body: some View {
         Form {
+            Section("Region Selection Mode") {
+                Picker("Mode", selection: regionCaptureMode) {
+                    ForEach(RegionCaptureMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+
             Section("Self Timer") {
                 Picker("Delay", selection: selfTimerDelay) {
                     ForEach(SelfTimerDelay.allCases, id: \.self) { delay in
