@@ -26,27 +26,33 @@ final class ScreenCapture {
         return URL(fileURLWithPath: tempPath)
     }
 
-    // MARK: - Frozen Frame (non-interactive full-screen grab for freeze-then-select region capture)
+    // MARK: - Display image and crop
 
-    func captureFrozenFrame(on screen: NSScreen?) async throws -> URL? {
+    func captureDisplayImage(on screen: NSScreen) -> CGImage? {
         guard !isCapturing else { return nil }
         isCapturing = true
         defer { isCapturing = false }
 
-        try? await Task.sleep(for: .milliseconds(200))
-
-        let targetScreen = screen
-            ?? NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }
-            ?? NSScreen.main
-
-        guard let displayID = targetScreen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+        guard let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
             return nil
         }
+        return CGDisplayCreateImage(CGDirectDisplayID(displayID.uint32Value))
+    }
 
-        let tempPath = makeTempPath()
-        let success = await runScreencapture(["-D", "\(displayID.intValue)", "-x", "-t", "png", tempPath])
-        guard success, FileManager.default.fileExists(atPath: tempPath) else { return nil }
-        return URL(fileURLWithPath: tempPath)
+    /// Crops a screen-local viewport expressed in AppKit points (bottom-left origin).
+    func crop(_ image: CGImage, to viewport: CGRect, on screen: NSScreen) -> CGImage? {
+        let scaleX = CGFloat(image.width) / screen.frame.width
+        let scaleY = CGFloat(image.height) / screen.frame.height
+        let rawRect = CGRect(
+            x: viewport.minX * scaleX,
+            y: (screen.frame.height - viewport.maxY) * scaleY,
+            width: viewport.width * scaleX,
+            height: viewport.height * scaleY
+        ).integral
+        let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        let cropRect = rawRect.intersection(bounds)
+        guard !cropRect.isNull, cropRect.width > 0, cropRect.height > 0 else { return nil }
+        return image.cropping(to: cropRect)
     }
 
     // MARK: - Region

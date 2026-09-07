@@ -92,34 +92,21 @@ final class CaptureOrchestrator {
             ?? NSScreen.main
         guard let targetScreen else { return }
 
-        guard let url = try? await ScreenCapture.shared.captureFrozenFrame(on: targetScreen) else {
+        try? await Task.sleep(for: .milliseconds(200))
+
+        guard let frozenImage = ScreenCapture.shared.captureDisplayImage(on: targetScreen) else {
             print("Capture failed: could not grab frozen frame")
             return
         }
-        defer { try? FileManager.default.removeItem(at: url) }
-
-        guard let image = NSImage(contentsOf: url),
-              let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
+        let displayImage = NSImage(
+            cgImage: frozenImage,
+            size: NSSize(width: targetScreen.frame.width, height: targetScreen.frame.height)
+        )
 
         let overlay = RegionSelectionOverlay()
-        guard let selection = await overlay.selectRegion(over: image, screens: [targetScreen]) else { return }
+        guard let selection = await overlay.selectRegion(over: displayImage, screens: [targetScreen]) else { return }
 
-        // Map the on-screen selection (points, bottom-left origin) to pixels (top-left origin).
-        let scale = CGFloat(cgImage.width) / targetScreen.frame.width
-        let frame = targetScreen.frame
-        let rawRect = CGRect(
-            x: selection.localRect.minX * scale,
-            y: (frame.height - selection.localRect.maxY) * scale,
-            width: selection.localRect.width * scale,
-            height: selection.localRect.height * scale
-        )
-        let maxX = min(rawRect.maxX, CGFloat(cgImage.width))
-        let maxY = min(rawRect.maxY, CGFloat(cgImage.height))
-        let minX = max(0, min(rawRect.minX, maxX - 1))
-        let minY = max(0, min(rawRect.minY, maxY - 1))
-        let cropRect = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY).integral
-
-        guard let cropped = cgImage.cropping(to: cropRect),
+        guard let cropped = ScreenCapture.shared.crop(frozenImage, to: selection.localRect, on: targetScreen),
               let tempURL = writePNGToTemp(cropped) else { return }
 
         ScreenCapture.shared.playShutterSound()
