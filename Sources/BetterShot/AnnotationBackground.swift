@@ -213,6 +213,7 @@ struct AnnotationBackgroundColor: Identifiable, Equatable, Hashable {
         NSColor(srgbRed: red, green: green, blue: blue, alpha: alpha)
     }
 
+    static let transparent = AnnotationBackgroundColor("transparent", title: "Transparent Background", red: 0, green: 0, blue: 0, alpha: 0)
     static let black = AnnotationBackgroundColor("black", title: "Black", red: 0.02, green: 0.02, blue: 0.024)
     static let white = AnnotationBackgroundColor("white", title: "White", red: 0.96, green: 0.96, blue: 0.94)
     static let graphite = AnnotationBackgroundColor("graphite", title: "Graphite", red: 0.17, green: 0.18, blue: 0.21)
@@ -244,7 +245,8 @@ struct AnnotationBackgroundColor: Identifiable, Equatable, Hashable {
             title: "Custom",
             red: converted.redComponent,
             green: converted.greenComponent,
-            blue: converted.blueComponent
+            blue: converted.blueComponent,
+            alpha: converted.alphaComponent
         )
     }
 }
@@ -513,7 +515,8 @@ extension BeautifierConfig {
                 title: color.name,
                 red: color.red,
                 green: color.green,
-                blue: color.blue
+                blue: color.blue,
+                alpha: color.alpha
             ))
         case .gradient(let preset):
             let colors = preset.stops.enumerated().map { index, stop in
@@ -568,7 +571,7 @@ extension AnnotationBackgroundStyle {
         switch self {
         case .none: .none
         case .solid(let color):
-            .solid(SolidColor(id: color.id, name: color.title, red: color.red, green: color.green, blue: color.blue))
+            .solid(SolidColor(id: color.id, name: color.title, red: color.red, green: color.green, blue: color.blue, alpha: color.alpha))
         case .gradient(let gradient):
             .gradient(gradient.preset ?? GradientPreset(id: gradient.id, name: gradient.title,
                 stops: gradient.colors.map { .init(red: $0.red, green: $0.green, blue: $0.blue) },

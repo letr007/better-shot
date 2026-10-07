@@ -530,7 +530,7 @@ struct GeneralSettingsTab: View {
     private func backgroundLabel(for style: BackgroundStyle) -> String {
         switch style {
         case .none: "No Background"
-        case .solid(let c): c.name
+        case .solid(let c): c.alpha == 0 ? "Transparent Background" : c.name
         case .gradient(let g): g.name
         case .wallpaper: "Custom Image"
         case .bundledImage: "macOS Wallpaper"
@@ -555,7 +555,16 @@ private struct DefaultBackgroundPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            noneButton
+            HStack(spacing: 8) {
+                noneButton
+                transparentButton
+            }
+            if case .solid(let color) = selectedStyle, color.alpha < 1 {
+                Text("Save as PNG to keep transparency. JPEG does not support transparent backgrounds.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("Transparent backgrounds apply to screenshots. Recordings use No Background.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             LazyVGrid(columns: swatchColumns, spacing: 5) {
                 ForEach(SolidColor.presets) { color in
                     solidButton(color)
@@ -597,6 +606,17 @@ private struct DefaultBackgroundPicker: View {
         .buttonStyle(.bordered)
         .controlSize(.small)
         .accessibilityAddTraits(selectedStyle == .none ? .isSelected : [])
+    }
+
+    private var transparentButton: some View {
+        Button {
+            selectedStyle = .solid(.transparent)
+        } label: {
+            Label("Transparent Background", systemImage: selectedStyle == .solid(.transparent) ? "checkmark" : "square.dashed")
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .accessibilityAddTraits(selectedStyle == .solid(.transparent) ? .isSelected : [])
     }
 
     private var customColor: Binding<Color> {
@@ -838,7 +858,10 @@ private struct DefaultConfigPreview: View {
         case .none:
             TransparencyGrid()
         case .solid(let color):
-            Rectangle().fill(color.color)
+            ZStack {
+                if color.alpha < 1 { TransparencyGrid().accessibilityHidden(true) }
+                Rectangle().fill(color.color)
+            }
         case .gradient(let preset):
             GradientBackgroundView(preset: preset)
         case .wallpaper(let source):

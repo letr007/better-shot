@@ -274,7 +274,13 @@ in the export integration run covers these rules against production code.
 `GradientPreset.presets` in [BackgroundStyle.swift](Sources/Models/BackgroundStyle.swift)
 is the palette source. General > Default Look initializes new media; editing a
 saved project must not overwrite those defaults. No Background retains framing
-settings for reuse. MP4 has no alpha channel, so uncovered areas render black.
+settings for reuse. Transparent Background is a solid fill with zero alpha, so
+capture and image-editor renderers retain padding, rounded corners, and shadows
+without baking a preview checkerboard into exports. `SolidColor` decodes missing
+alpha as 1 for older saved preferences; default-look conversions preserve alpha.
+PNG preserves screenshot transparency; JPEG does not. Recording defaults map a
+transparent screenshot fill to No Background because H.264/HEVC has no alpha
+channel. MP4 uncovered areas otherwise render black.
 
 ### UI, shortcuts, and automation
 

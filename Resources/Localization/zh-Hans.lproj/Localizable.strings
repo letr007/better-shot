@@ -1467,3 +1467,6 @@
 "Target position" = "目标位置";
 "Watermark" = "水印";
 "Never" = "永不";
+"Transparent Background" = "透明背景";
+"Save as PNG to keep transparency. JPEG does not support transparent backgrounds." = "保存为 PNG 可保留透明背景，JPEG 不支持透明。";
+"Transparent backgrounds apply to screenshots. Recordings use No Background." = "透明背景用于截图，录屏将使用无背景。";

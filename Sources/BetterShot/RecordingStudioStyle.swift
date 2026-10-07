@@ -420,8 +420,15 @@ struct RecordingStudioStyle: Equatable {
 enum RecordingStudioDefaults {
     static var style: RecordingStudioStyle {
         let config = AppPreferences.defaultBeautifierConfig
+        // H.264/HEVC recordings cannot preserve alpha; transparent screenshot defaults stay unframed here.
+        let background: AnnotationBackgroundStyle
+        if case .solid(let color) = config.style, color.alpha < 1 {
+            background = .none
+        } else {
+            background = config.annotationStyle
+        }
         return RecordingStudioStyle(
-            background: config.annotationStyle,
+            background: background,
             padding: config.padding,
             cornerRadius: config.cornerRadius,
             shadow: config.shadowStrength

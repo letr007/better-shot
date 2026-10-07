@@ -31,15 +31,30 @@ struct AnnotationBackgroundInspector: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Button {
-                onEditorAction()
-                settings.style = .none
-            } label: {
-                Label("No Background", systemImage: settings.style == .none ? "checkmark" : "rectangle.slash")
+            VStack(alignment: .leading, spacing: 8) {
+                Button {
+                    onEditorAction()
+                    settings.style = .none
+                } label: {
+                    Label("No Background", systemImage: settings.style == .none ? "checkmark" : "rectangle.slash")
+                }
+                .accessibilityAddTraits(settings.style == .none ? .isSelected : [])
+
+                Button {
+                    onEditorAction()
+                    settings.style = .solid(.transparent)
+                } label: {
+                    Label("Transparent Background", systemImage: settings.style == .solid(.transparent) ? "checkmark" : "square.dashed")
+                }
+                .accessibilityAddTraits(settings.style == .solid(.transparent) ? .isSelected : [])
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
-            .accessibilityAddTraits(settings.style == .none ? .isSelected : [])
+
+            if case .solid(let color) = settings.style, color.alpha < 1 {
+                Text("Save as PNG to keep transparency. JPEG does not support transparent backgrounds.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
 
             VStack(alignment: .leading, spacing: InspectorMetrics.groupLabelSpacing) {
                 InspectorGroupLabel("Fill library")

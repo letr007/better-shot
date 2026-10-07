@@ -101,7 +101,11 @@ Change or add bindings in **Settings > Shortcuts**. Extra actions, such as
 Capture Region & Pin or Edit Clipboard Image, start unassigned.
 
 Set the background, padding, corner radius, and shadow for new captures in
-**Settings > General > Default Look**.
+**Settings > General > Default Look**. Choose **Transparent Background** to keep
+padding, rounded corners, and shadows on a transparent canvas; save as PNG to
+preserve the alpha channel. **No Background** keeps the original screenshot without
+framing. The image editor offers the same transparent background option. Video
+recordings use No Background when the screenshot default is transparent.
 
 Region screenshots use BetterShot’s adjustable selector. In
 **Settings > Capture > Region**, **Freeze & Select** captures the displays before

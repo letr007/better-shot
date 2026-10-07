@@ -101,6 +101,13 @@ struct AnnotationCanvas: View {
             )
 
             ZStack(alignment: .topLeading) {
+                if case .solid(let color) = model.backgroundSettings.style, color.alpha < 1 {
+                    TransparencyGrid()
+                        .frame(width: displayLayout.canvasFrame.width, height: displayLayout.canvasFrame.height)
+                        .position(x: displayLayout.canvasFrame.midX, y: displayLayout.canvasFrame.midY)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
                 sceneStage(
                     viewportSize: proxy.size,
                     canvasFrame: displayLayout.canvasFrame,

@@ -18,21 +18,49 @@ struct SolidColor: Codable, Equatable, Hashable, Identifiable {
     let red: Double
     let green: Double
     let blue: Double
+    let alpha: Double
+
+    init(id: String, name: String, red: Double, green: Double, blue: Double, alpha: Double = 1) {
+        self.id = id
+        self.name = name
+        self.red = red
+        self.green = green
+        self.blue = blue
+        self.alpha = alpha
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, red, green, blue, alpha
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decode(String.self, forKey: .id),
+            name: try container.decode(String.self, forKey: .name),
+            red: try container.decode(Double.self, forKey: .red),
+            green: try container.decode(Double.self, forKey: .green),
+            blue: try container.decode(Double.self, forKey: .blue),
+            alpha: try container.decodeIfPresent(Double.self, forKey: .alpha) ?? 1
+        )
+    }
 
     var color: Color {
-        Color(red: red, green: green, blue: blue)
+        Color(red: red, green: green, blue: blue, opacity: alpha)
     }
 
     var nsColor: NSColor {
-        NSColor(red: red, green: green, blue: blue, alpha: 1)
+        NSColor(red: red, green: green, blue: blue, alpha: alpha)
     }
 
     var cgColor: CGColor {
-        CGColor(srgbRed: red, green: green, blue: blue, alpha: 1)
+        CGColor(srgbRed: red, green: green, blue: blue, alpha: alpha)
     }
 }
 
 extension SolidColor {
+    static let transparent = SolidColor(id: "transparent", name: "Transparent Background", red: 0, green: 0, blue: 0, alpha: 0)
+
     static let presets: [SolidColor] = [
         SolidColor(id: "obsidian", name: "Obsidian", red: 0.02, green: 0.02, blue: 0.03),
         SolidColor(id: "chalk", name: "Chalk", red: 0.96, green: 0.96, blue: 0.94),

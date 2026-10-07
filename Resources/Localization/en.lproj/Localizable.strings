@@ -1467,3 +1467,6 @@
 "Target position" = "Target position";
 "Watermark" = "Watermark";
 "Never" = "Never";
+"Transparent Background" = "Transparent Background";
+"Save as PNG to keep transparency. JPEG does not support transparent backgrounds." = "Save as PNG to keep transparency. JPEG does not support transparent backgrounds.";
+"Transparent backgrounds apply to screenshots. Recordings use No Background." = "Transparent backgrounds apply to screenshots. Recordings use No Background.";

@@ -1,6 +1,8 @@
 import AppKit
 import Carbon
 import Vision
+import ImageIO
+import UniformTypeIdentifiers
 @testable import BetterShot
 
 /// Non-interactive checks for local additions; never requests permissions or writes real preferences.
@@ -9,9 +11,10 @@ struct LocalCaptureIntegration {
     @MainActor static func main() throws {
         precondition(ProcessInfo.processInfo.environment["BETTERSHOT_TESTING"] == "1")
         try checkFrozenPixels()
+        try checkTransparentBackground()
         try checkOCR()
         try checkShortcutMigration()
-        print("PASS frozen-frame pixels, Chinese/English OCR, and local shortcut migration")
+        print("PASS frozen-frame pixels, transparent backgrounds, Chinese/English OCR, and local shortcut migration")
     }
 
     @MainActor static func checkFrozenPixels() throws {
@@ -53,6 +56,121 @@ struct LocalCaptureIntegration {
         precondition(RegionCaptureMode(rawValue: "frozen") == .frozen)
         precondition(RegionCaptureMode(rawValue: "system") == .system, "Legacy mode key retains its stored value")
         print("PASS saved-frame crop: secondary origin, Retina dimensions, all pixels, and invalid selection")
+    }
+
+    @MainActor static func checkTransparentBackground() throws {
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+        let sourceContext = CGContext(data: nil, width: 128, height: 80,
+            bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        sourceContext.setFillColor(red: 0.2, green: 0.6, blue: 0.8, alpha: 1)
+        sourceContext.fill(CGRect(x: 0, y: 0, width: 128, height: 80))
+        let source = sourceContext.makeImage()!
+        var config = BeautifierConfig()
+        config.style = .solid(.transparent)
+        config.padding = 0.25
+        config.cornerRadius = 0.1
+        config.shadowStrength = 0
+        let capture = BeautifierRenderer.render(image: source, config: config)!
+        let editor = try AnnotationBackgroundRenderer.compose(contentImage: source,
+            settings: config.annotationBackgroundSettings, colorSpace: colorSpace)
+
+        for image in [capture, editor] {
+            precondition(image.width == 168 && image.height == 120, "Transparent background retains padding")
+            let pixels = rgbaPixels(image)
+            precondition(alpha(pixels, width: image.width, x: 0, y: 0) == 0, "No preview checkerboard or color is exported")
+            precondition(alpha(pixels, width: image.width, x: 84, y: 60) == 255, "Screenshot pixels remain opaque")
+            precondition(alpha(pixels, width: image.width, x: 20, y: 20) == 0, "Rounded screenshot corners remain transparent")
+            let offset = (60 * image.width + 84) * 4
+            precondition(abs(Int(pixels[offset]) - 51) <= 1 && abs(Int(pixels[offset + 1]) - 153) <= 1,
+                         "Transparent fill must not recolor the screenshot")
+        }
+
+        var shadowConfig = config
+        shadowConfig.shadowStrength = 0.6
+        let shadowCapture = BeautifierRenderer.render(image: source, config: shadowConfig)!
+        let shadowEditor = try AnnotationBackgroundRenderer.compose(contentImage: source,
+            settings: shadowConfig.annotationBackgroundSettings, colorSpace: colorSpace)
+        for image in [shadowCapture, shadowEditor] {
+            let pixels = rgbaPixels(image)
+            var hasShadow = false
+            for y in 0..<image.height {
+                for x in 0..<image.width where x < 20 || x >= 148 || y < 20 || y >= 100 {
+                    let value = alpha(pixels, width: image.width, x: x, y: y)
+                    if value > 0 && value < 255 { hasShadow = true }
+                }
+            }
+            precondition(hasShadow, "Shadow must remain visible on a transparent canvas")
+            precondition(alpha(pixels, width: image.width, x: 0, y: 0) == 0)
+        }
+
+        var squareConfig = config
+        squareConfig.aspectRatio = .square
+        let squareCapture = BeautifierRenderer.render(image: source, config: squareConfig)!
+        let squareEditor = try AnnotationBackgroundRenderer.compose(contentImage: source,
+            settings: squareConfig.annotationBackgroundSettings, colorSpace: colorSpace)
+        precondition(squareCapture.width == 168 && squareCapture.height == 168)
+        precondition(squareEditor.width == 168 && squareEditor.height == 168)
+        var bare = squareConfig
+        bare.style = .none
+        precondition(BeautifierRenderer.render(image: source, config: bare) === source, "No Background still returns the source without decorations")
+        let bareEditor = try AnnotationBackgroundRenderer.compose(contentImage: source,
+            settings: bare.annotationBackgroundSettings, colorSpace: colorSpace)
+        precondition(bareEditor.width == source.width && bareEditor.height == source.height)
+        precondition(rgbaPixels(bareEditor) == rgbaPixels(source))
+
+        let stored = try JSONDecoder().decode(StoredBackground.self,
+            from: JSONEncoder().encode(StoredBackground(shadowConfig.annotationBackgroundSettings)))
+        precondition(stored.settings == shadowConfig.annotationBackgroundSettings, "Saved editor presets preserve transparent fill and decorations")
+
+        precondition(Bundle.main.bundleIdentifier != "com.bettershot.app", "Never change real application preferences in a test")
+        let defaults = UserDefaults.standard
+        let keys = ["bs_defaultBeautifierConfig", "bs_exportFormat"]
+        let previous = keys.map { defaults.object(forKey: $0) }
+        defer {
+            for (key, value) in zip(keys, previous) {
+                if let value { defaults.set(value, forKey: key) }
+                else { defaults.removeObject(forKey: key) }
+            }
+        }
+        AppPreferences.defaultBeautifierConfig = config
+        precondition(RecordingStudioDefaults.style.background == .none, "Screenshot transparency does not become an opaque black video frame")
+        var opaqueConfig = config
+        opaqueConfig.style = .solid(SolidColor.presets[0])
+        AppPreferences.defaultBeautifierConfig = opaqueConfig
+        precondition(RecordingStudioDefaults.style.background == opaqueConfig.annotationStyle, "Opaque video defaults keep their existing fill")
+
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("TransparentBackgroundCheck-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        AppPreferences.exportFormat = .png
+        let captureURL = CaptureOrchestrator.saveImage(shadowCapture, named: "capture.png", in: directory.path)!
+        let sourceURL = CaptureOrchestrator.saveImage(source, named: "source.png", in: directory.path)!
+        let editorURL = directory.appendingPathComponent("edited.png")
+        try AnnotationRenderer.render(sourceURL: sourceURL, shapes: [],
+            backgroundSettings: shadowConfig.annotationBackgroundSettings,
+            destinationURL: editorURL, contentType: .png)
+        for (url, expected) in [(captureURL, shadowCapture), (editorURL, shadowEditor)] {
+            let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil)!
+            let decoded = CGImageSourceCreateImageAtIndex(imageSource, 0, nil)!
+            precondition(rgbaPixels(decoded) == rgbaPixels(expected), "PNG save/reopen must preserve actual transparency pixels")
+        }
+        print("PASS transparent capture/editor backgrounds: alpha, rounded corners, padding, shadow, aspect ratio, PNG roundtrip, preset persistence, No Background, and video defaults")
+    }
+
+    private static func alpha(_ pixels: [UInt8], width: Int, x: Int, y: Int) -> UInt8 {
+        pixels[(y * width + x) * 4 + 3]
+    }
+
+    private static func rgbaPixels(_ image: CGImage) -> [UInt8] {
+        var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        bytes.withUnsafeMutableBytes { buffer in
+            let context = CGContext(data: buffer.baseAddress, width: image.width, height: image.height,
+                bitsPerComponent: 8, bytesPerRow: image.width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue)!
+            context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        }
+        return bytes
     }
 
     @MainActor static func checkOCR() throws {
