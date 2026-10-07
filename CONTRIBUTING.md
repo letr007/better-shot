@@ -86,7 +86,8 @@ Run these from the repository root:
 | `make release` | Build unsigned Release, as CI does |
 | `make build` | Build Debug with configured signing |
 | `make run` | Build Debug, stop the running BetterShot process, and launch the new app |
-| `make test` | Build unsigned Debug and run standalone, editor, and export checks |
+| `make test` | Build unsigned Debug and run standalone, editor, and export checks (opens native windows) |
+| `make test-localization` | Check English/Chinese resources and lookups without windows or permissions |
 | `make test-build` | Clean and build unsigned Release |
 | `make clean` | Remove build artifacts |
 | `make version` | Print the version from `version.json` |
@@ -94,6 +95,24 @@ Run these from the repository root:
 **Finish active captures and save your work before `make run`**: it terminates the
 running app. `make lint` can display compiler diagnostics, but its recipe can
 mask a failed build; use a real build or `make test` as the gate.
+
+### Localization
+
+`Resources/Localization/{en,zh-Hans}.lproj` contains the English and Simplified
+Chinese resources. SwiftUI literal labels use the standard localization lookup.
+Use `L10n.string` for fixed dynamic labels at the UI boundary and `L10n.format`
+with explicit placeholders for variable phrases. Keep persisted enum values,
+identifiers, user-entered text, custom preset names, and file names unchanged.
+Native errors in independently compiled Foundation helpers use `NSLocalizedString`.
+Add matching keys to both languages and preserve placeholder types and order.
+
+Run `make test-localization` to check duplicates, key parity, placeholders,
+explicit source references, formatting, and untranslated-text fallback. A build
+with `SWIFT_EMIT_LOC_STRINGS=YES` emits SwiftUI keys; set
+`BETTERSHOT_LOCALIZATION_METADATA` to that build's `Objects-normal/arm64` directory
+to include those keys in the check. This check never opens app windows. The full
+`make test` includes native UI integration checks and should only run when the
+screen is available for testing.
 
 ### Website development
 

@@ -97,7 +97,7 @@ struct InspectorValueFormat {
     }
 
     func displayString(for value: CGFloat) -> String {
-        if let name = namedValues[value] { return name }
+        if let name = namedValues[value] { return NSLocalizedString(name, comment: "Named inspector value") }
         let scaledValue = value * multiplier
         let number = formattedNumber(scaledValue)
         let sign = showsPositiveSign && roundedForDisplay(scaledValue) > 0 ? "+" : ""
@@ -111,6 +111,8 @@ struct InspectorValueFormat {
     func parse(_ text: String) -> CGFloat? {
         if let match = namedValues.first(where: {
             $0.value.caseInsensitiveCompare(text.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
+                || NSLocalizedString($0.value, comment: "Named inspector value")
+                    .caseInsensitiveCompare(text.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
         }) { return match.key }
         var numericText = text
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -246,7 +248,7 @@ struct InspectorSlider: View {
             )
             .opacity(revealsMarkers ? 1 : 0)
 
-            Text(title)
+            Text(L10n.string(title))
                 .font(.inspectorValue)
                 .foregroundStyle(.primary.opacity(0.78))
                 .lineLimit(1)
@@ -295,7 +297,7 @@ struct InspectorSlider: View {
             value: revealsMarkers
         )
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(title)
+        .accessibilityLabel(L10n.string(title))
         .accessibilityValue(format.displayString(for: value))
         .accessibilityHint("Drag horizontally to adjust, or edit the value field")
         .accessibilityAdjustableAction { direction in
@@ -311,7 +313,7 @@ struct InspectorSlider: View {
     }
 
     private var valueField: some View {
-        TextField(title, text: $draftText, selection: $valueSelection)
+        TextField(L10n.string(title), text: $draftText, selection: $valueSelection)
             .labelsHidden()
             .textFieldStyle(.plain)
             .font(.inspectorNumeric)
@@ -352,8 +354,8 @@ struct InspectorSlider: View {
                     .stroke(Color.accentColor.opacity(0.72), lineWidth: 1)
                 }
             }
-            .accessibilityLabel("\(title) value")
-            .help("Enter an exact value for \(title)")
+            .accessibilityLabel(L10n.format("%@ value", L10n.string(title)))
+            .help(L10n.format("Enter an exact value for %@", L10n.string(title)))
     }
 
     private var normalizedProgress: CGFloat {

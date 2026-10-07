@@ -321,7 +321,7 @@ private struct SmartRedactionButton: View {
             HStack(spacing: 6) {
                 Image(systemName: systemImage)
                     .font(.system(size: 11, weight: .medium))
-                Text(title)
+                Text(L10n.string(title))
                     .font(.inspectorValue)
             }
             .foregroundStyle(.primary.opacity(0.85))

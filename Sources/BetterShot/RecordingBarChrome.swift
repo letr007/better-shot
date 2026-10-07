@@ -224,7 +224,7 @@ struct BarActionLabel: View {
             Image(systemName: systemImage)
                 .font(.system(size: caption == nil ? 17 : (controlSize == .mini ? 18 : 22), weight: .regular))
             if let caption {
-                Text(caption)
+                Text(L10n.string(caption))
                     .font(.system(size: 11))
                     .lineLimit(1)
             }
@@ -259,7 +259,7 @@ struct BarActionLabel: View {
                 // Pause becomes Resume under a pointer that never moved; the
                 // pill it's showing has to follow.
                 guard isHovering else { return }
-                tooltip?.hover(id: id, text: title, frame: frame)
+                tooltip?.hover(id: id, text: L10n.string(title), frame: frame)
             }
             .onDisappear {
                 // A mode morph swaps the controls out from under a pointer
@@ -272,7 +272,7 @@ struct BarActionLabel: View {
         guard hovering != isHovering else { return }
         isHovering = hovering
         if hovering {
-            tooltip?.hover(id: id, text: title, frame: frame)
+            tooltip?.hover(id: id, text: L10n.string(title), frame: frame)
         } else {
             tooltip?.endHover(id: id)
         }
@@ -314,7 +314,7 @@ struct BarActionButton: View {
             BarActionLabel(id: id, title: title, systemImage: systemImage, tint: tint, caption: caption)
         }
         .buttonStyle(BarButtonStyle())
-        .accessibilityLabel(accessibility ?? title)
+        .accessibilityLabel(L10n.string(accessibility ?? title))
     }
 }
 

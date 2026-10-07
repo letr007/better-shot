@@ -219,7 +219,7 @@ struct ScrollCaptureSessionView: View {
                        tint: model.isAutoScrolling ? .orange : .blue, width: 90, action: toggleAutoScroll)
                 .disabled(model.isStarting)
                 .opacity(model.isStarting ? 0.7 : 1)
-                .accessibilityLabel(model.isAutoScrolling ? "Pause Automatic Scrolling" : "Start Automatic Scrolling")
+                .accessibilityLabel(L10n.string(model.isAutoScrolling ? "Pause Automatic Scrolling" : "Start Automatic Scrolling"))
                 .accessibilityIdentifier("scrollCaptureAutoScroll")
 
             pillButton("Stop", tint: .red, width: 56, action: stop)
@@ -233,7 +233,7 @@ struct ScrollCaptureSessionView: View {
 
     @ViewBuilder private var status: some View {
         if let message = model.statusMessage {
-            Text(message)
+            Text(L10n.string(message))
                 .font(.system(size: 11))
                 .foregroundStyle(BarMetrics.activeTint)
                 .lineLimit(2)
@@ -258,7 +258,7 @@ struct ScrollCaptureSessionView: View {
 
     private func pillButton(_ title: String, tint: Color, width: CGFloat, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title)
+            Text(L10n.string(title))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.white)
                 .lineLimit(1)

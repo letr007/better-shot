@@ -42,10 +42,10 @@ enum RecordingRecoveryCoordinator {
             let alert = NSAlert()
             alert.alertStyle = .informational
             alert.messageText = recoveredCount == 1
-                ? "Recovered an interrupted recording"
-                : "Recovered \(recoveredCount) interrupted recordings"
-            alert.informativeText = "The playable footage was preserved in History and can be reopened in BetterShot Studio."
-            alert.addButton(withTitle: "OK")
+                ? L10n.string("Recovered an interrupted recording")
+                : L10n.format("Recovered %lld interrupted recordings", recoveredCount)
+            alert.informativeText = L10n.string("The playable footage was preserved in History and can be reopened in BetterShot Studio.")
+            alert.addButton(withTitle: L10n.string("OK"))
             alert.runModal()
         }
     }

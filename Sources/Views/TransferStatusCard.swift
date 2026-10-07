@@ -74,7 +74,7 @@ struct TransferStatusCard: View {
     private var compactContent: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 4) {
-                Text(compactTitle).font(.system(size: 11, weight: .semibold))
+                Text(L10n.string(compactTitle)).font(.system(size: 11, weight: .semibold))
                     .lineLimit(1).minimumScaleFactor(0.9)
                 Spacer(minLength: 0)
                 circleButton(help: isWorking ? "Cancel sharing" : "Dismiss", action: isWorking ? onCancel : onDismiss)
@@ -82,7 +82,7 @@ struct TransferStatusCard: View {
             switch status {
             case .working(_, let progress):
                 TransferProgressBar(progress: progress.flatMap { $0.isFinite ? min(max($0, 0), 1) : nil })
-                Text(progress.map { "\(Int((min(max($0.isFinite ? $0 : 0, 0), 1) * 100).rounded()))% uploaded" } ?? "Preparing your capture…")
+                Text(progress.map { L10n.format("%lld%% uploaded", Int64((min(max($0.isFinite ? $0 : 0, 0), 1) * 100).rounded())) } ?? L10n.string("Preparing your capture…"))
                     .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(2)
             case .linkReady(let url):
                 Button { NSWorkspace.shared.open(url) } label: {
@@ -90,15 +90,15 @@ struct TransferStatusCard: View {
                         .font(.system(size: 10, design: .monospaced))
                 }
                 .buttonStyle(.plain).foregroundStyle(Color.accentColor)
-                .help(url.absoluteString).accessibilityLabel("Open share link: \(url.absoluteString)")
+                .help(url.absoluteString).accessibilityLabel(L10n.format("Open share link: %@", url.absoluteString))
                 HStack(spacing: 6) {
-                    Button(didCopy ? "Copied" : "Copy Link") { copy(url) }
+                    Button(L10n.string(didCopy ? "Copied" : "Copy Link")) { copy(url) }
                     Button("Open") { NSWorkspace.shared.open(url) }
                 }
                 .buttonStyle(.bordered).controlSize(.mini)
             case .failed(_, let message, let canRetry):
-                Text(message).font(.system(size: 10)).foregroundStyle(.secondary)
-                    .lineLimit(2).help(message)
+                Text(L10n.string(message)).font(.system(size: 10)).foregroundStyle(.secondary)
+                    .lineLimit(2).help(L10n.string(message))
                 if let onSettings {
                     Button("Sharing Settings", action: onSettings).controlSize(.mini)
                 } else if canRetry {
@@ -151,7 +151,7 @@ struct TransferStatusCard: View {
             VStack(alignment: .leading, spacing: 7) {
                 HStack(alignment: .firstTextBaseline) {
                     ZStack(alignment: .leading) {
-                        Text(stage.label)
+                        Text(L10n.string(stage.label))
                             .font(.system(size: 13, weight: .semibold))
                             .id(stage.label)
                             .transition(.opacity)
@@ -256,13 +256,13 @@ struct TransferStatusCard: View {
             iconTile(systemName: "exclamationmark.triangle.fill", tint: .orange)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(headline)
+                Text(L10n.string(headline))
                     .font(.system(size: 13, weight: .semibold))
-                Text(message)
+                Text(L10n.string(message))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
-                    .help(message)
+                    .help(L10n.string(message))
             }
 
             Spacer(minLength: 8)
@@ -297,13 +297,13 @@ struct TransferStatusCard: View {
                 .contentShape(Circle())
         }
         .buttonStyle(TransferPressStyle())
-        .help(help)
-        .accessibilityLabel(help)
+        .help(L10n.string(help))
+        .accessibilityLabel(L10n.string(help))
     }
 
     private func quietButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title)
+            Text(L10n.string(title))
                 .font(.system(size: 12, weight: .medium))
                 .frame(height: 26)
                 .padding(.horizontal, 8)
@@ -324,7 +324,7 @@ struct TransferStatusCard: View {
             HStack(spacing: 6) {
                 Image(systemName: icon)
                     .font(.system(size: 11, weight: .semibold))
-                Text(title)
+                Text(L10n.string(title))
                     .font(.system(size: 12, weight: .semibold))
             }
             .foregroundStyle(.primary)
@@ -439,7 +439,7 @@ final class TransferToastAnchorView: NSView {
             self.hostingView = hostingView
             panel = ToastWindow.makePanel(hostingView: hostingView)
             panel?.identifier = NSUserInterfaceItemIdentifier("BetterShot.TransferToast")
-            panel?.title = "Export and sharing status"
+            panel?.title = L10n.string("Export and sharing status")
         }
         guard let panel else { return }
         panel.appearance = window.appearance

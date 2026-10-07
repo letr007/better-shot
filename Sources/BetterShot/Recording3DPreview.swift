@@ -60,7 +60,7 @@ final class Recording3DMetalView: MTKView, MTKViewDelegate, AVPlayerItemOutputPu
         if let device { imageContext = CIContext(mtlDevice: device, options: [.cacheIntermediates: false]) }
         screenOutput.setDelegate(self, queue: .main)
         cameraOutput.setDelegate(self, queue: .main)
-        setAccessibilityLabel("Video preview")
+        setAccessibilityLabel(L10n.string("Video preview"))
     }
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 

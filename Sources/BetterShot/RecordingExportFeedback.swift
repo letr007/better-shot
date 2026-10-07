@@ -76,8 +76,8 @@ enum RecordingExportNotifier {
 
     private static func deliver(fileURL: URL) {
         let content = UNMutableNotificationContent()
-        content.title = "Export Complete"
-        content.body = "\(fileURL.lastPathComponent) has been saved."
+        content.title = L10n.string("Export Complete")
+        content.body = L10n.format("%@ has been saved.", fileURL.lastPathComponent)
         content.sound = .default
         content.userInfo = [fileURLKey: fileURL.path]
 

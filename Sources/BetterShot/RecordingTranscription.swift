@@ -318,13 +318,13 @@ nonisolated enum RecordingTranscriptionService {
         var errorDescription: String? {
             switch self {
             case .noNarrationTrack:
-                "This recording has no microphone audio to transcribe."
+                NSLocalizedString("This recording has no microphone audio to transcribe.", comment: "")
             case .unsupportedLocale:
-                "On-device transcription isn't available for your language yet."
+                NSLocalizedString("On-device transcription isn't available for your language yet.", comment: "")
             case .narrationUnreadable:
-                "The narration audio could not be read."
+                NSLocalizedString("The narration audio could not be read.", comment: "")
             case .noSpeechDetected:
-                "No speech was detected in the narration."
+                NSLocalizedString("No speech was detected in the narration.", comment: "")
             }
         }
     }

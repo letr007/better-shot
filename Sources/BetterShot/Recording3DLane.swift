@@ -102,14 +102,14 @@ private struct Recording3DBlock: View {
                 model.pause()
                 model.seek(to: shot.start + min(0.5, (shot.end - shot.start) / 2))
             } label: {
-                Label(shot.title, systemImage: "cube.transparent")
+                Label(L10n.string(shot.title), systemImage: "cube.transparent")
                     .font(.system(size: 10, weight: .medium))
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("3D shot: \(shot.title), \(shot.start.formatted(.number.precision(.fractionLength(2)))) to \(shot.end.formatted(.number.precision(.fractionLength(2)))) seconds")
+            .accessibilityLabel(L10n.format("3D shot: %@, %@ to %@ seconds", L10n.string(shot.title), shot.start.formatted(.number.precision(.fractionLength(2))), shot.end.formatted(.number.precision(.fractionLength(2)))))
             .accessibilityAddTraits(selected ? .isSelected : [])
             .simultaneousGesture(drag(edge: nil))
             handle(leading: false)
@@ -119,7 +119,7 @@ private struct Recording3DBlock: View {
         .background(selected ? Color.accentColor : Color.accentColor.opacity(0.18), in: RoundedRectangle(cornerRadius: 5))
         .opacity(shot.isEnabled ? 1 : 0.5)
         .offset(x: shot.start * pointsPerSecond, y: 4)
-        .help("\(shot.title) · Drag to move, drag edges to resize. Edit exact times in Effects.")
+        .help(L10n.format("%@ · Drag to move, drag edges to resize. Edit exact times in Effects.", L10n.string(shot.title)))
         .onDisappear {
             if dragBase != nil {
                 dragBase = nil
@@ -128,7 +128,7 @@ private struct Recording3DBlock: View {
         }
         .contextMenu {
             Button("Play Shot") { model.select3DShot(id: shot.id); model.play3DShot() }
-            Button(shot.isEnabled ? "Disable Shot" : "Enable Shot") {
+            Button(L10n.string(shot.isEnabled ? "Disable Shot" : "Enable Shot")) {
                 model.select3DShot(id: shot.id)
                 var next = shot; next.isEnabled.toggle(); model.update3DShot(next)
             }

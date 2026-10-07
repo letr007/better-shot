@@ -119,7 +119,7 @@ struct RecordingStudioContent: View {
                     } label: {
                         Image(systemName: "sidebar.left")
                     }
-                    .help(isInspectorPresented ? "Hide Inspector" : "Show Inspector")
+                    .help(L10n.string(isInspectorPresented ? "Hide Inspector" : "Show Inspector"))
                     .accessibilityLabel("Toggle video inspector")
                 }
             }
@@ -183,13 +183,13 @@ struct RecordingStudioContent: View {
         Menu {
             Picker("Aspect Ratio", selection: cropAspectBinding) {
                 ForEach(CropAspectRatio.allCases) { aspect in
-                    Text(aspect.title).tag(aspect)
+                    Text(L10n.string(aspect.title)).tag(aspect)
                 }
             }
             .pickerStyle(.inline)
             .labelsHidden()
         } label: {
-            Label(model.cropAspect.title, systemImage: "aspectratio")
+            Label(L10n.string(model.cropAspect.title), systemImage: "aspectratio")
                 .labelStyle(.titleAndIcon)
         }
         .help("Aspect ratio")
@@ -299,7 +299,7 @@ struct RecordingStudioContent: View {
     /// says it in words for anyone who reads the title bar first.
     private var windowTitle: String {
         model.hasUnsavedChanges
-            ? "\(model.projectDisplayName) - Edited"
+            ? L10n.format("%@ - Edited", model.projectDisplayName)
             : model.projectDisplayName
     }
 
@@ -384,7 +384,7 @@ struct RecordingStudioContent: View {
             guard let url = URL(string: link) else { return nil }
             return .linkReady(url: url)
         case .failed(let message):
-            return .failed(headline: "Share failed", message: message, canRetry: model.canRetryShare)
+            return .failed(headline: L10n.string("Share failed"), message: message, canRetry: model.canRetryShare)
         case .idle:
             break
         }
@@ -394,7 +394,7 @@ struct RecordingStudioContent: View {
         case .finished(let url):
             return .exported(url: url)
         case .failed(let message):
-            return .failed(headline: "Export failed", message: message, canRetry: true)
+            return .failed(headline: L10n.string("Export failed"), message: message, canRetry: true)
         case .idle:
             return nil
         }
@@ -853,7 +853,7 @@ private struct StudioSubtitleRow: View {
             }
             .buttonStyle(.plain)
             .disabled(editorTime == nil)
-            .help(editorTime == nil ? "This subtitle's audio was cut out" : "Jump to this subtitle")
+            .help(L10n.string(editorTime == nil ? "This subtitle's audio was cut out" : "Jump to this subtitle"))
 
             TextField(
                 "Subtitle",
@@ -976,7 +976,7 @@ private struct StudioTranscriptEditPanel: View {
                 HStack(spacing: 6) {
                     Image(systemName: "scissors")
                         .font(.system(size: 11, weight: .medium))
-                    Text(selection.count == 1 ? "Cut Word" : "Cut \(selection.count) Words")
+                    Text(selection.count == 1 ? L10n.string("Cut Word") : L10n.format("Cut %lld Words", selection.count))
                         .font(.inspectorValue)
                         .lineLimit(1)
                 }
@@ -1120,7 +1120,8 @@ private struct StudioInspectorIconButton: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .help(help)
+        .help(L10n.string(help))
+        .accessibilityLabel(L10n.string(help))
         .onHover { isHovering = $0 }
     }
 }
@@ -1747,8 +1748,8 @@ private struct StudioTimelineEditor: View {
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
-                .help(model.isPlaying ? "Pause" : "Play")
-                .accessibilityLabel(model.isPlaying ? "Pause" : "Play")
+                .help(L10n.string(model.isPlaying ? "Pause" : "Play"))
+                .accessibilityLabel(L10n.string(model.isPlaying ? "Pause" : "Play"))
                 .disabled(!model.isLoaded)
 
                 timelineButton("Skip to End", systemImage: "forward.end.fill") {
@@ -1818,8 +1819,8 @@ private struct StudioTimelineEditor: View {
                 .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         }
         .buttonStyle(TransportIconButtonStyle())
-        .help(help)
-        .accessibilityLabel(help)
+        .help(L10n.string(help))
+        .accessibilityLabel(L10n.string(help))
     }
 }
 
@@ -1843,8 +1844,8 @@ private struct StudioTimelineCutBadge: View {
     @State private var showsPreview = false
 
     private var durationLabel: String {
-        marker.removedDuration < 0.1 ? "<0.1s"
-            : "\(marker.removedDuration.formatted(.number.precision(.fractionLength(0...1))))s"
+        marker.removedDuration < 0.1 ? L10n.string("<0.1s")
+            : L10n.format("%@s", marker.removedDuration.formatted(.number.precision(.fractionLength(0...1))))
     }
 
     var body: some View {
@@ -1873,7 +1874,7 @@ private struct StudioTimelineCutBadge: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(showsPreview ? .primary : .secondary)
-        .accessibilityLabel(marker.removedDuration > 0 ? "Removed \(durationLabel)" : "Split")
+        .accessibilityLabel(marker.removedDuration > 0 ? L10n.format("Removed %@", durationLabel) : L10n.string("Split"))
         .accessibilityHint("Show cut preview and go to this cut")
         .onHover { showsPreview = $0 }
         .popover(isPresented: $showsPreview, arrowEdge: .top) {
@@ -1890,7 +1891,7 @@ struct StudioTimelineCutPreview: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(marker.removedDuration > 0 ? "Removed footage" : "Split point").font(.headline)
+            Text(L10n.string(marker.removedDuration > 0 ? "Removed footage" : "Split point")).font(.headline)
             Group {
                 if let preview {
                     Image(decorative: preview, scale: 1).resizable().scaledToFit()
@@ -1903,8 +1904,9 @@ struct StudioTimelineCutPreview: View {
             .frame(width: 240, height: 135)
             .background(Color.black.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
             .clipShape(RoundedRectangle(cornerRadius: 6))
-            Text("Original: \(marker.sourceStart.formatted(.number.precision(.fractionLength(0...2))))s"
-                 + (marker.removedDuration > 0 ? "–\(marker.sourceEnd.formatted(.number.precision(.fractionLength(0...2))))s" : ""))
+            Text(marker.removedDuration > 0
+                ? L10n.format("Original: %@s–%@s", marker.sourceStart.formatted(.number.precision(.fractionLength(0...2))), marker.sourceEnd.formatted(.number.precision(.fractionLength(0...2))))
+                : L10n.format("Original: %@s", marker.sourceStart.formatted(.number.precision(.fractionLength(0...2)))))
                 .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
         }
         .padding(12)
@@ -2502,7 +2504,7 @@ private struct StudioZoomCueBlock: View {
                 model.seek(to: block.editorStart + blockDuration / 2)
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(cue.anchorMode == .pinnedAnchor ? "Manual" : "Automatic") zoom, \(cue.zoom.formatted()) times")
+            .accessibilityLabel(L10n.format("%@ zoom, %@ times", L10n.string(cue.anchorMode == .pinnedAnchor ? "Manual" : "Automatic"), cue.zoom.formatted()))
             .accessibilityHint("Select to edit. Drag to move; drag either edge to resize.")
             .accessibilityAddTraits(isSelected ? .isSelected : [])
             .help("Select to edit zoom amount and focus. Drag to move; drag edges to resize.")
@@ -2892,11 +2894,11 @@ struct StudioInspector: View {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 85))], spacing: 4) {
                         ForEach(Recording3DInspector.Section.allCases, id: \.self) { section in
                             Button { proxy.scrollTo(section, anchor: .top) } label: {
-                                Text(section.rawValue).frame(maxWidth: .infinity)
+                                Text(L10n.string(section.rawValue)).frame(maxWidth: .infinity)
                             }
                             .buttonStyle(EditorButtonStyle(horizontalPadding: 6, bordered: true))
                             .font(.caption)
-                            .accessibilityLabel("Jump to 3D \(section.rawValue)")
+                            .accessibilityLabel(L10n.format("Jump to 3D %@", L10n.string(section.rawValue)))
                         }
                     }
                 }.padding(.horizontal, 12).padding(.vertical, 8)
@@ -3122,15 +3124,15 @@ struct StudioInspector: View {
             ForEach([RecordingMaskSegment.Effect.blur, .pixelate], id: \.self) { effect in
                 Button { model.toggleMaskTool(effect) } label: {
                     ViewThatFits(in: .horizontal) {
-                        Label(effect == .blur ? "Blur" : "Pixelate",
+                        Label(L10n.string(effect == .blur ? "Blur" : "Pixelate"),
                               systemImage: effect == .blur ? "drop.fill" : "square.grid.3x3.fill").fixedSize()
-                        Text(effect == .blur ? "Blur" : "Pixelate")
+                        Text(L10n.string(effect == .blur ? "Blur" : "Pixelate"))
                     }
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(EditorButtonStyle(selected: model.isEditingMasks && model.selectedMask?.effect == effect,
                                                horizontalPadding: 4))
-                .help("Draw an area to " + (effect == .blur ? "blur" : "pixelate"))
+                .help(L10n.string(effect == .blur ? "Draw an area to blur" : "Draw an area to pixelate"))
             }
         }
         .buttonStyle(EditorButtonStyle())
@@ -3142,7 +3144,7 @@ struct StudioInspector: View {
     private var inspectorHeader: some View {
         VStack(spacing: 0) {
             HStack {
-                Text(selectedTab.title).font(.system(size: 13, weight: .semibold))
+                Text(L10n.string(selectedTab.title)).font(.system(size: 13, weight: .semibold))
                 Spacer()
             }
             .padding(16)
@@ -3182,7 +3184,7 @@ struct StudioInspector: View {
             InspectorGroupLabel("Video aspect ratio")
             Picker("Video aspect ratio", selection: $model.exportAspect) {
                 ForEach(ExportAspectPreset.allCases, id: \.self) { preset in
-                    Text(preset.title).tag(preset).help(preset.help)
+                    Text(L10n.string(preset.title)).tag(preset).help(L10n.string(preset.help))
                 }
             }
             .pickerStyle(.menu)
@@ -3195,16 +3197,16 @@ struct StudioInspector: View {
                     isSelected: { $0 == model.exportAspectMode },
                     onTap: { model.exportAspectMode = $0 },
                     label: { mode in
-                        Text(mode.title)
+                        Text(L10n.string(mode.title))
                             .font(.inspectorLabel)
-                            .help(mode.help)
+                            .help(L10n.string(mode.help))
                     }
                 )
-                Text(
+                Text(L10n.string(
                     model.exportAspectMode == .fill
                         ? "Crops into the recording; the camera follows your cursor and zooms."
                         : "Shows the whole recording framed on the background."
-                )
+                ))
                 .font(.inspectorLabel)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -3243,7 +3245,7 @@ struct StudioInspector: View {
                         }
                     }
                 },
-                label: { Text($0.title).font(.inspectorLabel) }
+                label: { Text(L10n.string($0.title)).font(.inspectorLabel) }
             )
 
             if backgroundKind == .color {
@@ -3307,7 +3309,7 @@ struct StudioInspector: View {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
-        panel.title = "Choose Video Background Wallpaper"
+        panel.title = L10n.string("Choose Video Background Wallpaper")
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             selectWallpaper(AnnotationCustomWallpaper(url: url))
@@ -3319,7 +3321,7 @@ struct StudioInspector: View {
     private var zoomControls: some View {
         VStack(alignment: .leading, spacing: InspectorMetrics.rowSpacing) {
             let pressCount = model.recordedPressTimes.count
-            Text(pressCount == 1 ? "1 recorded click" : "\(pressCount) recorded clicks")
+            Text(pressCount == 1 ? L10n.string("1 recorded click") : L10n.format("%lld recorded clicks", pressCount))
                 .font(.inspectorLabel)
                 .foregroundStyle(.secondary)
 
@@ -3335,9 +3337,9 @@ struct StudioInspector: View {
             }
 
             if model.selectedCue == nil {
-                Text(model.zoomCues.isEmpty
+                Text(L10n.string(model.zoomCues.isEmpty
                     ? "Click Auto Zoom to turn recorded clicks into smooth camera moves."
-                    : "Select a zoom block on the timeline to adjust it.")
+                    : "Select a zoom block on the timeline to adjust it."))
                     .font(.inspectorLabel)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -3366,7 +3368,7 @@ struct StudioInspector: View {
                         model.updateZoomCue(updated)
                         model.endZoomCueEdit(actionName: "Change Zoom Mode")
                     },
-                    label: { Text($0.inspectorTitle).font(.inspectorLabel) }
+                    label: { Text(L10n.string($0.inspectorTitle)).font(.inspectorLabel) }
                 )
             }
 
@@ -3511,13 +3513,13 @@ struct StudioInspector: View {
                                        let image = StudioCursorImageCache.image(for: artwork) {
                                         Image(nsImage: image).resizable().scaledToFit().frame(height: 26)
                                     }
-                                    Text(appearance.title).font(.system(size: 10)).lineLimit(1)
+                                    Text(L10n.string(appearance.title)).font(.system(size: 10)).lineLimit(1)
                                 }
                                 .frame(maxWidth: .infinity).padding(.vertical, 6)
                             }
                             .buttonStyle(EditorButtonStyle(selected: model.style.cursor.appearance == appearance,
                                                            horizontalPadding: 4))
-                            .accessibilityLabel("\(appearance.title) cursor")
+                            .accessibilityLabel(L10n.format("%@ cursor", L10n.string(appearance.title)))
                             .accessibilityAddTraits(model.style.cursor.appearance == appearance ? .isSelected : [])
                         }
                     }
@@ -3601,7 +3603,7 @@ struct StudioInspector: View {
             options: options,
             isSelected: { $0 == model.keystrokePlacement },
             onTap: { model.keystrokePlacement = $0 },
-            label: { Text($0.title).font(.inspectorLabel) }
+            label: { Text(L10n.string($0.title)).font(.inspectorLabel) }
         )
     }
 
@@ -3652,7 +3654,7 @@ struct StudioInspector: View {
                 isSelected: { $0 == transcriptTab },
                 onTap: { transcriptTab = $0 },
                 label: { tab in
-                    Text(tab.title)
+                    Text(L10n.string(tab.title))
                         .font(.system(size: 10.5, weight: .medium))
                         .lineLimit(1)
                 }
@@ -3727,7 +3729,7 @@ struct StudioInspector: View {
 
             if model.removableFillerWordCount > 0 {
                 inspectorAction(
-                    "Remove Filler Words (\(model.removableFillerWordCount))",
+                    L10n.format("Remove Filler Words (%lld)", model.removableFillerWordCount),
                     systemImage: "scissors"
                 ) {
                     model.removeFillerWords()
@@ -3736,7 +3738,7 @@ struct StudioInspector: View {
 
             if model.trimmableSilenceCount > 0 {
                 inspectorAction(
-                    "Trim Silences (\(model.trimmableSilenceCount))",
+                    L10n.format("Trim Silences (%lld)", model.trimmableSilenceCount),
                     systemImage: "waveform.badge.minus"
                 ) {
                     model.trimNarrationSilences()
@@ -3809,7 +3811,7 @@ struct StudioInspector: View {
                         VStack(spacing: 5) {
                             StudioLayoutThumbnail(preset: preset, cameraOnLeft: model.style.cameraOnLeft)
                                 .aspectRatio(16.0 / 9.0, contentMode: .fit)
-                            Text(preset.title)
+                            Text(L10n.string(preset.title))
                                 .font(.system(size: 11, weight: .medium))
                                 .multilineTextAlignment(.center)
                                 .lineLimit(2)
@@ -3827,7 +3829,7 @@ struct StudioInspector: View {
                         }
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(preset.title)
+                    .accessibilityLabel(L10n.string(preset.title))
                     .accessibilityAddTraits(model.style.layoutPreset == preset ? .isSelected : [])
                 }
             }
@@ -3863,9 +3865,9 @@ struct StudioInspector: View {
                                 range: 0.12...0.7, format: .percent())
                 InspectorSlider("Rounding", value: $model.style.camera.roundness,
                                 range: 0...0.5, format: .percent())
-                Text(model.style.layoutPreset == .bubble
+                Text(L10n.string(model.style.layoutPreset == .bubble
                     ? "Drag the camera on the canvas to place it. Use 1:1 with 50% rounding for a circle."
-                    : "The camera overlaps the screen edge. Adjust its size and shape here.")
+                    : "The camera overlaps the screen edge. Adjust its size and shape here."))
                     .font(.inspectorLabel)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -3888,7 +3890,7 @@ struct StudioInspector: View {
                     options: RecordingAudioFormat.allCases,
                     isSelected: { $0 == model.audioExportFormat },
                     onTap: { model.audioExportFormat = $0 },
-                    label: { Text($0.title).font(.inspectorLabel) }
+                    label: { Text(L10n.string($0.title)).font(.inspectorLabel) }
                 )
             }
 
@@ -3903,11 +3905,11 @@ struct StudioInspector: View {
                 ) {
                     pickReplacementAudio()
                 }
-                .help(
+                .help(L10n.string(
                     model.hasRecordedAudio
                         ? "Swap in an audio file, aligned to the start of the edited timeline"
                         : "Lay an audio file over this silent recording"
-                )
+                ))
             }
 
             if let replacement = model.replacementAudio {
@@ -3943,7 +3945,7 @@ struct StudioInspector: View {
                     .contentTransition(.numericText())
             }
         case .finished(let url):
-            audioExportChrome(help: "Reveal \(url.lastPathComponent) in Finder") {
+            audioExportChrome(help: L10n.format("Reveal %@ in Finder", url.lastPathComponent)) {
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             } label: {
                 Image(systemName: "checkmark.circle.fill")
@@ -3981,7 +3983,7 @@ struct StudioInspector: View {
             .inspectorField(height: 28)
         }
         .buttonStyle(.plain)
-        .help(help)
+        .help(L10n.string(help))
     }
 
     private func replacementChip(for replacement: RecordingReplacementAudio) -> some View {
@@ -4003,8 +4005,8 @@ struct StudioInspector: View {
                     .foregroundStyle(.orange)
                     .help(
                         drift > 0
-                            ? "Runs \(Self.spanText(drift)) longer than the cut - the tail is dropped"
-                            : "Runs \(Self.spanText(-drift)) shorter than the cut - the end plays silent"
+                            ? L10n.format("Runs %@ longer than the cut - the tail is dropped", Self.spanText(drift))
+                            : L10n.format("Runs %@ shorter than the cut - the end plays silent", Self.spanText(-drift))
                     )
             }
 
@@ -4023,7 +4025,7 @@ struct StudioInspector: View {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
-        panel.title = "Choose Replacement Audio"
+        panel.title = L10n.string("Choose Replacement Audio")
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             model.replaceAudio(with: url)
@@ -4038,7 +4040,7 @@ struct StudioInspector: View {
     /// Short spans read better in seconds than as 0:00 timecode.
     private static func spanText(_ seconds: TimeInterval) -> String {
         let value = max(0, seconds)
-        return value < 60 ? String(format: "%.1fs", value) : clockText(value)
+        return value < 60 ? L10n.format("%.1fs", value) : clockText(value)
     }
 
     private func inspectorAction(
@@ -4051,7 +4053,7 @@ struct StudioInspector: View {
             HStack(spacing: 6) {
                 Image(systemName: systemImage)
                     .font(.system(size: 11, weight: .medium))
-                Text(title)
+                Text(L10n.string(title))
                     .font(.inspectorValue)
                     .lineLimit(1)
             }

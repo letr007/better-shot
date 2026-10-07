@@ -332,7 +332,7 @@ private final class SelectionView: NSView {
         }
 
         let hint = movesSelection ? "drag to adjust" : "drag the edges to resize, or draw a new area"
-        drawLabel("\(pixelSize(rect))  ·  ↩ to capture  ·  \(hint)  ·  esc", below: rect)
+        drawLabel(L10n.format("%@  ·  ↩ to capture  ·  %@  ·  esc", pixelSize(rect), L10n.string(hint)), below: rect)
     }
 
     private func pixelSize(_ rect: CGRect) -> String {

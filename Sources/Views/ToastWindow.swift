@@ -125,9 +125,9 @@ private struct ToastContentView: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                Text(L10n.string(title))
                     .font(.system(size: 13, weight: .semibold))
-                Text(message)
+                Text(L10n.string(message))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)

@@ -15,7 +15,7 @@ enum VideoTrimExportError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidRange:
-            "Choose a longer trim range."
+            NSLocalizedString("Choose a longer trim range.", comment: "Invalid trim duration")
         }
     }
 }

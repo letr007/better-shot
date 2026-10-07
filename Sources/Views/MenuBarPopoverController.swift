@@ -189,7 +189,7 @@ extension MenuBarPopoverController: NSWindowDelegate, NSDraggingDestination {
     private func showDropTargetHint() {
         guard let button = statusItem?.button else { return }
         button.isHighlighted = true
-        let hint = NSImage(systemSymbolName: "square.and.pencil", accessibilityDescription: "Drop image to edit")
+        let hint = NSImage(systemSymbolName: "square.and.pencil", accessibilityDescription: L10n.string("Drop image to edit"))
         hint?.isTemplate = true
         setIcon(hint, on: button, duration: 0.18)
     }

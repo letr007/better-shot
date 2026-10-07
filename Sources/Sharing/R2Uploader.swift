@@ -3,7 +3,7 @@ import Foundation
 
 struct R2UploadError: LocalizedError {
     let message: String
-    var errorDescription: String? { message }
+    var errorDescription: String? { NSLocalizedString(message, comment: "Cloud sharing error") }
 }
 
 /// Hand-rolled AWS SigV4 signing for direct-to-R2 uploads. No SDK dependency.
@@ -328,7 +328,7 @@ final class R2Uploader {
                 filename: contents.mediaFilename,
                 publicBaseURL: credentials.publicBaseURL
             ) else {
-                throw R2UploadError(message: "Could not build a direct link to \(contents.mediaFilename).")
+                throw R2UploadError(message: String(format: NSLocalizedString("Could not build a direct link to %@.", comment: "Invalid direct share link"), locale: .current, contents.mediaFilename))
             }
             shareURL = directURL
         } else {
@@ -427,7 +427,7 @@ final class R2Uploader {
 
     nonisolated private static func parseErrorMessage(data: Data, statusCode: Int) -> String {
         guard let text = String(data: data, encoding: .utf8), let code = extractXMLValue(tag: "Code", from: text) else {
-            return "R2 request failed with status \(statusCode)."
+            return String(format: NSLocalizedString("R2 request failed with status %d.", comment: "R2 HTTP failure"), locale: .current, statusCode)
         }
         if let detail = extractXMLValue(tag: "Message", from: text), !detail.isEmpty {
             return "\(code): \(detail)"

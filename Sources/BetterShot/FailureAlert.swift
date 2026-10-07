@@ -19,11 +19,12 @@ enum FailureAlert {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = message
+        alert.messageText = L10n.string(message)
         alert.informativeText = [detail, error.localizedDescription]
             .compactMap { $0 }
+            .map { L10n.string($0) }
             .joined(separator: " ")
-        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: L10n.string("OK"))
         alert.runModal()
     }
 }

@@ -74,15 +74,15 @@ final class EditorCloseGuard: NSObject, NSWindowDelegate {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = offersDelete()
-            ? "Do you want to save your project before closing or delete it?"
-            : "Do you want to save the changes to “\(projectName())”?"
+            ? L10n.string("Do you want to save your project before closing or delete it?")
+            : L10n.format("Do you want to save the changes to “%@”?", projectName())
         alert.informativeText = offersDelete()
-            ? "This recording has never been saved. Deleting it removes the footage as well."
-            : "Your changes since the last save will be lost if you don't save them."
+            ? L10n.string("This recording has never been saved. Deleting it removes the footage as well.")
+            : L10n.string("Your changes since the last save will be lost if you don't save them.")
 
-        alert.addButton(withTitle: "Save and Close")
-        alert.addButton(withTitle: offersDelete() ? "Delete and Close" : "Discard Changes")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: L10n.string("Save and Close"))
+        alert.addButton(withTitle: L10n.string(offersDelete() ? "Delete and Close" : "Discard Changes"))
+        alert.addButton(withTitle: L10n.string("Cancel"))
         // Escape and ⌘. land on Cancel rather than destroying anything.
         alert.buttons[2].keyEquivalent = "\u{1b}"
 

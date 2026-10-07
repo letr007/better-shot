@@ -75,7 +75,7 @@ enum ShareImageCompressor {
         guard let destination = CGImageDestinationCreateWithURL(
             url as CFURL, type.identifier as CFString, 1, nil
         ) else {
-            throw Failure(errorDescription: "Could not encode the image for upload.")
+            throw Failure(errorDescription: NSLocalizedString("Could not encode the image for upload.", comment: "Share image encoding error"))
         }
 
         var options: [CFString: Any] = [:]
@@ -83,7 +83,7 @@ enum ShareImageCompressor {
 
         CGImageDestinationAddImage(destination, image, options as CFDictionary)
         guard CGImageDestinationFinalize(destination) else {
-            throw Failure(errorDescription: "Could not write the image for upload.")
+            throw Failure(errorDescription: NSLocalizedString("Could not write the image for upload.", comment: "Share image writing error"))
         }
         return url
     }

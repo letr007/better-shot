@@ -72,7 +72,7 @@ struct AnnotationEditorWindow: View {
             .tint(EditorChrome.accent)
             .accentColor(EditorChrome.accent)
             .editorFullScreenSupport()
-            .navigationTitle(url?.deletingPathExtension().lastPathComponent ?? "Image Editor")
+            .navigationTitle(url?.deletingPathExtension().lastPathComponent ?? L10n.string("Image Editor"))
             .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
             .toolbar {
                 ToolbarItemGroup(placement: .navigation) {
@@ -82,7 +82,7 @@ struct AnnotationEditorWindow: View {
                         Label("Undo", systemImage: "arrow.uturn.backward")
                     }
                     .disabled(!model.canUndo)
-                    .help(ShortcutService.shared.help("Undo", for: .imageUndo))
+                    .help(ShortcutService.shared.help(L10n.string("Undo"), for: .imageUndo))
 
                     Button {
                         model.redo()
@@ -90,7 +90,7 @@ struct AnnotationEditorWindow: View {
                         Label("Redo", systemImage: "arrow.uturn.forward")
                     }
                     .disabled(!model.canRedo)
-                    .help(ShortcutService.shared.help("Redo", for: .imageRedo))
+                    .help(ShortcutService.shared.help(L10n.string("Redo"), for: .imageRedo))
                 }
 
                 ToolbarItemGroup(placement: .primaryAction) {
@@ -184,11 +184,11 @@ struct AnnotationEditorWindow: View {
             Menu {
                 Picker("Aspect Ratio", selection: $model.backgroundSettings.aspectRatio) {
                     ForEach(AnnotationBackgroundAspectRatio.allCases) { ratio in
-                        Text(ratio.title).tag(ratio)
+                        Text(L10n.string(ratio.title)).tag(ratio)
                     }
                 }
             } label: {
-                Label(model.backgroundSettings.aspectRatio.title, systemImage: "aspectratio")
+                Label(L10n.string(model.backgroundSettings.aspectRatio.title), systemImage: "aspectratio")
             }
             .fixedSize()
             .frame(width: 110)
@@ -201,7 +201,7 @@ struct AnnotationEditorWindow: View {
 
             Menu {
                 ForEach(AnnotationImageTransform.allCases, id: \.self) { transform in
-                    Button(transform.title, systemImage: transform.systemImage) { transformImage(transform) }
+                    Button(L10n.string(transform.title), systemImage: transform.systemImage) { transformImage(transform) }
                 }
             } label: {
                 Label("Rotate Left", systemImage: "rotate.left").labelStyle(.iconOnly)
@@ -212,7 +212,7 @@ struct AnnotationEditorWindow: View {
             .menuStyle(.borderlessButton)
             .menuIndicator(.visible)
             .buttonStyle(.borderless)
-            .help(ShortcutService.shared.help("Rotate left 90°. Open the menu for Rotate Right and Flip.", for: .imageRotateLeft))
+            .help(ShortcutService.shared.help(L10n.string("Rotate left 90°. Open the menu for Rotate Right and Flip."), for: .imageRotateLeft))
             .disabled(isSaving || isExporting || isCopying || uploadPhase.isUploading || model.isSmartRedacting)
             Divider().frame(height: 24)
 
@@ -222,15 +222,15 @@ struct AnnotationEditorWindow: View {
                     model.selectTool(tool)
                     if tool == .arrow { ImageEditingTip().invalidate(reason: .actionPerformed) }
                 } label: {
-                    Label(tool.title, systemImage: tool.systemImage).labelStyle(.iconOnly)
+                    Label(L10n.string(tool.title), systemImage: tool.systemImage).labelStyle(.iconOnly)
                 }
                 .buttonStyle(EditorButtonStyle(selected: model.selectedTool == tool, horizontalPadding: 6))
                 .accessibilityAddTraits(model.selectedTool == tool ? .isSelected : [])
-                .help(ShortcutService.shared.help(tool.helpText, for: ShortcutService.Action.allCases.first { $0.annotationTool == tool }))
+                .help(ShortcutService.shared.help(L10n.string(tool.helpText), for: ShortcutService.Action.allCases.first { $0.annotationTool == tool }))
                 .popoverTip(tool == .arrow && !OnboardingState.shouldPresent() ? ImageEditingTip() : nil, arrowEdge: .bottom)
             }
 
-            EditorPopover(title: "Smart Redaction", systemImage: "eye.slash") {
+            EditorPopover(title: L10n.string("Smart Redaction"), systemImage: "eye.slash") {
                 AnnotationSmartRedactionControls(model: model, onEditorAction: clearInspectorFocus)
             }
 
@@ -245,7 +245,7 @@ struct AnnotationEditorWindow: View {
             } label: {
                 Label("Inspector", systemImage: "sidebar.left").labelStyle(.iconOnly)
             }
-            .help(isInspectorPresented ? "Hide Inspector" : "Show Inspector")
+            .help(L10n.string(isInspectorPresented ? "Hide Inspector" : "Show Inspector"))
             .accessibilityLabel("Toggle image inspector")
         }
         .buttonStyle(EditorButtonStyle())
@@ -264,7 +264,7 @@ struct AnnotationEditorWindow: View {
     private var annotationStyleBar: some View {
         HStack(spacing: 8) {
             if model.isColorStyleAvailable {
-                EditorPopover(title: "Color", systemImage: "paintpalette") {
+                EditorPopover(title: L10n.string("Color"), systemImage: "paintpalette") {
                     AnnotationSwatchStrip(selectedSwatch: model.selectedSwatch) { swatch in
                         clearInspectorFocus()
                         model.setSwatch(swatch)
@@ -288,7 +288,7 @@ struct AnnotationEditorWindow: View {
                     .frame(width: 140)
             }
             if model.isTextStyleAvailable {
-                EditorPopover(title: "Text Style", systemImage: "textformat") {
+                EditorPopover(title: L10n.string("Text Style"), systemImage: "textformat") {
                     AnnotationTextStyleControls(model: model)
                 }
             }
@@ -329,7 +329,7 @@ struct AnnotationEditorWindow: View {
             }
         }
         .disabled(model.previewImage == nil || isSaving || isExporting || isCopying)
-        .help(ShortcutService.shared.help("Save screenshot to your save folder", for: .imageSave))
+        .help(ShortcutService.shared.help(L10n.string("Save screenshot to your save folder"), for: .imageSave))
 
         Button(action: exportImage) {
             if isExporting {
@@ -341,7 +341,7 @@ struct AnnotationEditorWindow: View {
         }
         .buttonStyle(.borderedProminent)
         .disabled(model.previewImage == nil || model.imageSize == .zero || isExporting || isSaving || isCopying || uploadPhase.isUploading)
-        .accessibilityLabel(isExporting ? "Exporting image" : "Export image")
+        .accessibilityLabel(L10n.string(isExporting ? "Exporting image" : "Export image"))
         .help("Save the finished image to your Mac")
 
 
@@ -381,7 +381,7 @@ struct AnnotationEditorWindow: View {
                     }
                 }
                 .disabled(model.previewImage == nil || model.imageSize == .zero || isCopying || isExporting)
-                .help(ShortcutService.shared.help("Copy the finished image to the clipboard", for: .imageCopy))
+                .help(ShortcutService.shared.help(L10n.string("Copy the finished image to the clipboard"), for: .imageCopy))
 
             }
         }
@@ -397,13 +397,13 @@ struct AnnotationEditorWindow: View {
         Menu {
             Picker("Aspect Ratio", selection: aspectBinding) {
                 ForEach(CropAspectRatio.allCases) { aspect in
-                    Text(aspect.title).tag(aspect)
+                    Text(L10n.string(aspect.title)).tag(aspect)
                 }
             }
             .pickerStyle(.inline)
             .labelsHidden()
         } label: {
-            Label(model.cropAspect.title, systemImage: "aspectratio")
+            Label(L10n.string(model.cropAspect.title), systemImage: "aspectratio")
                 .labelStyle(.titleAndIcon)
         }
         .help("Aspect ratio")
@@ -506,7 +506,7 @@ struct AnnotationEditorWindow: View {
             return .linkReady(url: url)
         case .failed(let message):
             return .failed(
-                headline: "Upload failed",
+                headline: L10n.string("Upload failed"),
                 message: message,
                 canRetry: lastUploadOptions != nil
             )
@@ -546,7 +546,7 @@ struct AnnotationEditorWindow: View {
                 try ScreenshotFileActions.copyPNGToClipboard(from: renderedURL, of: sourceURL)
                 flashCopyConfirmation()
             } catch {
-                model.errorMessage = "Failed to copy annotation: \(error.localizedDescription)"
+                model.errorMessage = L10n.format("Failed to copy annotation: %@", error.localizedDescription)
             }
         }
     }
@@ -575,7 +575,7 @@ struct AnnotationEditorWindow: View {
         panel.directoryURL = BetterShotPreferences.exportDirectory
         panel.nameFieldStringValue = ScreenshotFileActions.exportFileName(for: sourceURL)
         panel.canCreateDirectories = true
-        panel.title = "Export Screenshot"
+        panel.title = L10n.string("Export Screenshot")
 
         panel.begin { response in
             guard response == .OK, let destinationURL = panel.url else {
@@ -594,7 +594,7 @@ struct AnnotationEditorWindow: View {
                     )
                     lastExportURL = destinationURL
                 } catch {
-                    model.errorMessage = "Failed to export image: \(error.localizedDescription)"
+                    model.errorMessage = L10n.format("Failed to export image: %@", error.localizedDescription)
                 }
             }
         }
@@ -607,7 +607,7 @@ struct AnnotationEditorWindow: View {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
-        panel.title = "Choose Background Wallpaper"
+        panel.title = L10n.string("Choose Background Wallpaper")
 
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
@@ -753,7 +753,7 @@ struct AnnotationEditorWindow: View {
                 )
                 flashSaveConfirmation()
             } catch {
-                model.errorMessage = "Failed to save annotation: \(error.localizedDescription)"
+                model.errorMessage = L10n.format("Failed to save annotation: %@", error.localizedDescription)
             }
         }
     }
@@ -771,7 +771,7 @@ struct AnnotationEditorWindow: View {
         // A screenshot is already in History whether or not it is annotated,
         // so there is no "delete the whole thing" case here.
         closeGuard.offersDelete = { false }
-        closeGuard.projectName = { model.sourceURL?.lastPathComponent ?? "this screenshot" }
+        closeGuard.projectName = { model.sourceURL?.lastPathComponent ?? L10n.string("this screenshot") }
         closeGuard.onDecision = { decision, done in
             switch decision {
             case .save:
@@ -787,7 +787,7 @@ struct AnnotationEditorWindow: View {
                         model.releaseEditorResources()
                         done()
                     } catch {
-                        model.errorMessage = "Failed to save annotation: \(error.localizedDescription)"
+                        model.errorMessage = L10n.format("Failed to save annotation: %@", error.localizedDescription)
                     }
                 }
             case .discard:

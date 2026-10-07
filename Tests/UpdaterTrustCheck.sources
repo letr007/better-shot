@@ -1,3 +1,4 @@
 Sources/Services/AppUpdater.swift
 Sources/Views/ToastWindow.swift
 Sources/Views/GlassSurface.swift
+Sources/App/Localization.swift

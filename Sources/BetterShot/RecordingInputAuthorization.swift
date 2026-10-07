@@ -28,9 +28,9 @@ enum RecordingInputAuthorization {
         fileprivate var title: String {
             switch self {
             case .camera:
-                "Camera"
+                L10n.string("Camera")
             case .microphone:
-                "Microphone"
+                L10n.string("Microphone")
             }
         }
 
@@ -82,18 +82,18 @@ enum RecordingInputAuthorization {
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "\(input.title) access needed"
+        alert.messageText = L10n.format("%@ access needed", input.title)
 
         if isRestricted {
-            alert.informativeText = "BetterShot can't use the \(input.title.lowercased()) because access is restricted on this Mac."
-            alert.addButton(withTitle: "OK")
+            alert.informativeText = L10n.format("BetterShot can't use the %@ because access is restricted on this Mac.", input.title.lowercased())
+            alert.addButton(withTitle: L10n.string("OK"))
             alert.runModal()
             return
         }
 
-        alert.informativeText = "Allow BetterShot to use the \(input.title.lowercased()) in Privacy & Security, then select it again."
-        alert.addButton(withTitle: "Open System Settings")
-        alert.addButton(withTitle: "Cancel")
+        alert.informativeText = L10n.format("Allow BetterShot to use the %@ in Privacy & Security, then select it again.", input.title.lowercased())
+        alert.addButton(withTitle: L10n.string("Open System Settings"))
+        alert.addButton(withTitle: L10n.string("Cancel"))
 
         if alert.runModal() == .alertFirstButtonReturn,
            let settingsURL = input.settingsURL {

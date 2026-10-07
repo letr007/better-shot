@@ -153,9 +153,9 @@ private struct TeleprompterComposerView: View {
                 .controlSize(.small)
                 .labelsHidden()
                 .tint(.green)
-                .help(isEnabled
+                .help(L10n.string(isEnabled
                     ? "Teleprompter will appear in the notch while recording"
-                    : "Turn on to show the script in the notch while recording")
+                    : "Turn on to show the script in the notch while recording"))
         }
     }
 

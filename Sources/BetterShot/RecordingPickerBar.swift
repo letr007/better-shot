@@ -61,7 +61,7 @@ struct RecordingPickerControls: View {
                 BarActionButton(id: id, title: title, systemImage: icon, caption: caption) {
                     capture(action)
                 }
-                .help(title)
+                .help(L10n.string(title))
             }
             BarDivider()
             Menu {
@@ -70,7 +70,7 @@ struct RecordingPickerControls: View {
                         Button {
                             screenshotDelay = delay.rawValue
                         } label: {
-                            menuSelectionLabel(delay.label, isSelected: screenshotDelay == delay.rawValue)
+                            menuSelectionLabel(delay == .off ? L10n.string("Off") : L10n.format("%llds", delay.rawValue), isSelected: screenshotDelay == delay.rawValue)
                         }
                     }
                 }
@@ -108,11 +108,11 @@ struct RecordingPickerControls: View {
     }
 
     private func timerLabel(_ seconds: Int) -> String {
-        seconds == 0 ? "None" : "\(seconds) second\(seconds == 1 ? "" : "s")"
+        seconds == 0 ? L10n.string("None") : L10n.format(seconds == 1 ? "%lld second" : "%lld seconds", seconds)
     }
 
     private var timerTooltip: String {
-        recordingDelay == 0 ? "Timer off" : "Recording timer \(recordingDelay)s"
+        recordingDelay == 0 ? L10n.string("Timer off") : L10n.format("Recording timer %llds", recordingDelay)
     }
 
     @ViewBuilder
@@ -247,11 +247,11 @@ struct RecordingOptionsView: View {
     }
 
     private var cameraAccessibilityLabel: String {
-        guard !cameraID.isEmpty else { return "Camera off - click to record your camera, right-click to pick one" }
+        guard !cameraID.isEmpty else { return L10n.string("Camera off - click to record your camera, right-click to pick one") }
         guard let camera = RecordingDeviceCatalog.cameras().first(where: { $0.uniqueID == cameraID }) else {
-            return "Camera unavailable - right-click to choose another camera"
+            return L10n.string("Camera unavailable - right-click to choose another camera")
         }
-        return "Camera on - \(camera.localizedName), right-click to switch"
+        return L10n.format("Camera on - %@, right-click to switch", camera.localizedName)
     }
 
     private var microphoneTooltip: String {
@@ -260,11 +260,11 @@ struct RecordingOptionsView: View {
     }
 
     private var microphoneAccessibilityLabel: String {
-        guard !microphoneID.isEmpty else { return "Microphone off - click to choose an input" }
+        guard !microphoneID.isEmpty else { return L10n.string("Microphone off - click to choose an input") }
         guard let microphone = RecordingDeviceCatalog.microphone(withID: microphoneID) else {
-            return "Microphone unavailable - choose another input"
+            return L10n.string("Microphone unavailable - choose another input")
         }
-        return "Microphone on - \(microphone.localizedName)"
+        return L10n.format("Microphone on - %@", microphone.localizedName)
     }
 
     @ViewBuilder
@@ -286,7 +286,7 @@ struct RecordingOptionsView: View {
     private var microphonePicker: some View {
         Menu {
             Button { microphoneID = "" } label: {
-                menuSelectionLabel("Off", isSelected: microphoneID.isEmpty)
+                menuSelectionLabel(L10n.string("Off"), isSelected: microphoneID.isEmpty)
             }
             Divider()
             ForEach(RecordingDeviceCatalog.microphones(), id: \.uniqueID) { device in

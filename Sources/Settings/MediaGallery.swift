@@ -115,12 +115,12 @@ final class MediaGalleryWindowController: NSWindowController, NSWindowDelegate {
     func open(on screen: NSScreen? = nil) {
         if window == nil {
             let window = NSWindow(contentViewController: NSHostingController(rootView: MediaGallery { [weak self] in
-                self?.window?.title = $0.title
+                self?.window?.title = L10n.string($0.title)
             }))
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
             window.toolbarStyle = .unified
             window.titlebarAppearsTransparent = true
-            window.title = MediaGalleryCategory.all.title
+            window.title = L10n.string(MediaGalleryCategory.all.title)
             window.setContentSize(NSSize(width: 1080, height: 740))
             window.minSize = NSSize(width: 780, height: 560)
             window.isReleasedWhenClosed = false
@@ -229,18 +229,18 @@ struct MediaGalleryContent: View {
             VStack(spacing: 0) {
                 if let actionMessage {
                     HStack(alignment: .top) {
-                        Text(actionMessage)
+                        Text(L10n.string(actionMessage))
                             .font(.callout).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
                         Button("Dismiss") { self.actionMessage = nil }
                     }
                     .padding(16)
                 }
                 if visible.isEmpty {
-                    ContentUnavailableView(search.isEmpty ? (cloud ? "No cloud shares yet" : "No saved media yet") : "No matching media",
+                    ContentUnavailableView(L10n.string(search.isEmpty ? (cloud ? "No cloud shares yet" : "No saved media yet") : "No matching media"),
                         systemImage: cloud ? "icloud" : "photo.on.rectangle",
-                        description: Text(search.isEmpty
+                        description: Text(L10n.string(search.isEmpty
                             ? (cloud ? "Share a screenshot or video from its editor to see it here." : "Save a screenshot or finish a recording, then refresh.")
-                            : "Try another name or media type."))
+                            : "Try another name or media type.")))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if listView {
                     Table(visible, selection: $selection, sortOrder: $sortOrder) {
@@ -254,8 +254,10 @@ struct MediaGalleryContent: View {
                                 .help(item.createdAt.formatted(date: .complete, time: .standard))
                         }
                         .width(140)
-                        TableColumn("Kind", value: \.kindLabel)
-                            .width(76)
+                        TableColumn("Kind", value: \.kindLabel) { item in
+                            Text(L10n.string(item.kindLabel))
+                        }
+                        .width(76)
                     }
                     .tableStyle(.inset(alternatesRowBackgrounds: true))
                     .onKeyPress(keys: [.return, .space]) { _ in
@@ -300,9 +302,9 @@ struct MediaGalleryContent: View {
                 Divider()
                 HStack(spacing: 8) {
                     Image(systemName: cloud ? "icloud" : "internaldrive")
-                    Text(cloud ? "Cloud Shares" : "On this Mac").fixedSize()
+                    Text(L10n.string(cloud ? "Cloud Shares" : "On this Mac")).fixedSize()
                     Image(systemName: "chevron.right").font(.caption2)
-                    Text(category.title).lineLimit(1)
+                    Text(L10n.string(category.title)).lineLimit(1)
                     if let selected = visible.first(where: { $0.id == selection }) {
                         Image(systemName: "chevron.right").font(.caption2)
                         Text(selected.title).lineLimit(1).truncationMode(.middle)
@@ -315,7 +317,7 @@ struct MediaGalleryContent: View {
                 .background(.bar)
             }
             .background(Color(nsColor: .textBackgroundColor))
-            .navigationTitle(category.title)
+            .navigationTitle(L10n.string(category.title))
             .toolbar {
                 ToolbarItem {
                     Picker("View", selection: $listView) {
@@ -357,20 +359,20 @@ struct MediaGalleryContent: View {
 
     private func sidebarRow(_ category: MediaGalleryCategory) -> some View {
         Label {
-            Text(category.title).foregroundStyle(.primary)
+            Text(L10n.string(category.title)).foregroundStyle(.primary)
         } icon: {
             Image(systemName: category.icon)
                 .symbolRenderingMode(.hierarchical)
         }
         .badge(MediaGalleryItem.filtered(items, kind: category.kind, cloud: category.cloud, search: "").count)
         .tag(category)
-        .accessibilityLabel("\(category.cloud ? "Cloud" : "Local") \(category.title)")
+        .accessibilityLabel(L10n.format(category.cloud ? "Cloud %@" : "Local %@", L10n.string(category.title)))
     }
 
     private func card(_ item: MediaGalleryItem) -> some View {
         MediaGalleryCard(item: item, cloud: cloud, listView: listView, selected: selection == item.id,
             onSelect: { selection = item.id; if !listView { focusedItem = item.id } },
-            onDeleteFailure: { actionMessage = $0 + " Refresh to review remaining items; local files already moved can be restored from Trash." })
+            onDeleteFailure: { actionMessage = L10n.format("%@ Refresh to review remaining items; local files already moved can be restored from Trash.", L10n.string($0)) })
     }
 }
 
@@ -420,10 +422,10 @@ struct MediaGalleryCard: View {
             }
             if deleting { ProgressView("Deleting…").controlSize(.small) }
             if let error {
-                Text(error).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+                Text(L10n.string(error)).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
             }
             if let deletionError {
-                Text(deletionError).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+                Text(L10n.string(deletionError)).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
                 Button("Try Again") { confirmingDelete = true }.controlSize(.small)
             }
         }
@@ -435,19 +437,19 @@ struct MediaGalleryCard: View {
         .contextMenu { actions }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(item.title)
-        .accessibilityValue(item.hasLocalFile ? (item.kind == .recording ? "Video" : "Screenshot") : "Local source unavailable")
+        .accessibilityValue(L10n.string(item.hasLocalFile ? (item.kind == .recording ? "Video" : "Screenshot") : "Local source unavailable"))
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityAction(named: "Open", open)
         .accessibilityAction(named: "Select", onSelect)
-        .help(item.title + (item.hasLocalFile ? " — Double-click to open. Right-click for actions." : " — Local source unavailable for editing."))
+        .help(L10n.format(item.hasLocalFile ? "%@ — Double-click to open. Right-click for actions." : "%@ — Local source unavailable for editing.", item.title))
         .disabled(deleting)
-        .alert(cloud ? "Delete this cloud share?" : "Move this capture to Trash?", isPresented: $confirmingDelete) {
-            Button(cloud ? "Delete Cloud Share" : "Move to Trash", role: .destructive) { delete() }
+        .alert(L10n.string(cloud ? "Delete this cloud share?" : "Move this capture to Trash?"), isPresented: $confirmingDelete) {
+            Button(L10n.string(cloud ? "Delete Cloud Share" : "Move to Trash"), role: .destructive) { delete() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(cloud
-                ? "The shared copy of “\(item.title)” will be permanently deleted and its link will stop working. Local files stay on your Mac."
-                : "“\(item.title)” and its local source and edit files will move to Trash. Close its editor first. Existing cloud shares stay online.")
+            Text(L10n.format(cloud
+                ? "The shared copy of “%@” will be permanently deleted and its link will stop working. Local files stay on your Mac."
+                : "“%@” and its local source and edit files will move to Trash. Close its editor first. Existing cloud shares stay online.", item.title))
         }
         .task(id: [item.previewURL.path, String(describing: item.modifiedAt)]) {
             let source = HistoryStore.ThumbnailSource(url: item.previewURL, kind: item.kind)
@@ -495,7 +497,7 @@ struct MediaGalleryCard: View {
         }
         if let url = item.cloudURL {
             Divider()
-            Button(copied ? "Link Copied" : "Copy Link", systemImage: "link") {
+            Button(L10n.string(copied ? "Link Copied" : "Copy Link"), systemImage: "link") {
                 NSPasteboard.general.clearContents()
                 copied = NSPasteboard.general.setString(url.absoluteString, forType: .string)
                 error = copied ? nil : "Couldn’t copy the link. Try again."
@@ -503,7 +505,7 @@ struct MediaGalleryCard: View {
             Button("Open Cloud", systemImage: "icloud") { openCloud(url) }
         }
         Divider()
-        Button(cloud ? "Delete Cloud Share…" : "Move to Trash…", systemImage: "trash", role: .destructive) {
+        Button(L10n.string(cloud ? "Delete Cloud Share…" : "Move to Trash…"), systemImage: "trash", role: .destructive) {
             confirmingDelete = true
         }
     }

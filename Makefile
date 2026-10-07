@@ -14,6 +14,7 @@ SHELL := /bin/bash -o pipefail
 #   make lint         — Swift compiler warnings check
 #   make test-build   — Full clean + release build to verify everything compiles
 #   make test         — Build and run all checks without signing or Keychain access
+#   make test-localization — Check localization resources without opening windows
 #   make version      — Print current version
 #   make ship         — Signed release: build, sign, notarize, DMG (both architectures)
 
@@ -30,7 +31,7 @@ BUILD_NUM   := $(shell python3 -c "import json; print(json.load(open('version.js
 DMG_NAME     = BetterShot-$(VERSION).dmg
 DMG_DIR      = release
 
-.PHONY: generate build release run dmg clean lint test test-build version ship help
+.PHONY: generate build release run dmg clean lint test test-localization test-build version ship help
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -92,6 +93,13 @@ test: generate ## Build and run regression/editor/export checks without Keychain
 		CODE_SIGNING_ALLOWED=NO ENABLE_TESTABILITY=YES build 2>&1 | tail -3
 	@bash scripts/run-checks.sh
 	@BETTERSHOT_DERIVED_DATA="$(TEST_DERIVED_DIR)" bash Tests/run-exports.sh
+
+test-localization: ## Validate translations and lookups without windows or permission prompts
+	@mkdir -p $(DERIVED_DIR)/LocalizationChecks
+	@xcrun swiftc -swift-version 6 -enable-actor-data-race-checks \
+		Tests/LocalizationCheck.swift Sources/App/Localization.swift \
+		-o $(DERIVED_DIR)/LocalizationChecks/LocalizationCheck
+	@BETTERSHOT_TESTING=1 $(DERIVED_DIR)/LocalizationChecks/LocalizationCheck
 
 test-build: clean release ## Full clean + release build
 	@echo "==> Test build passed."

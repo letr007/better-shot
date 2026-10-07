@@ -281,7 +281,8 @@ final class ScreenCapture {
         let message = diagnostic.trimmingCharacters(in: .whitespacesAndNewlines)
         if status == 1 && message.isEmpty { return false }
         throw NSError(domain: "BetterShot.ScreenCapture", code: Int(status), userInfo: [
-            NSLocalizedDescriptionKey: "\(message.isEmpty ? "macOS could not create the screenshot." : message) Try again. If this continues, quit and reopen BetterShot and check Screen & System Audio Recording permission in System Settings."
+            NSLocalizedDescriptionKey: String(format: NSLocalizedString("%@ Try again. If this continues, quit and reopen BetterShot and check Screen & System Audio Recording permission in System Settings.", comment: "Screenshot command failure"), locale: .current,
+                message.isEmpty ? NSLocalizedString("macOS could not create the screenshot.", comment: "Screenshot command failed without a diagnostic") : message)
         ])
     }
 

@@ -45,6 +45,8 @@ struct AnnotationTextStyleControls: View {
                         Text(segment.title)
                             .font(segment.font)
                             .underline(segment == .underline)
+                            .help(L10n.string(segment.accessibilityTitle))
+                            .accessibilityLabel(L10n.string(segment.accessibilityTitle))
                     }
                 )
                 .frame(width: 90)
@@ -57,6 +59,8 @@ struct AnnotationTextStyleControls: View {
                 label: { segment in
                     Image(systemName: segment.systemImage)
                         .font(.system(size: 11, weight: .semibold))
+                        .help(L10n.string(segment.accessibilityTitle))
+                        .accessibilityLabel(L10n.string(segment.accessibilityTitle))
                 }
             )
         }
@@ -112,6 +116,7 @@ struct AnnotationTextStyleControls: View {
         .menuStyle(.button)
         .buttonStyle(.plain)
         .help("Font family")
+        .accessibilityLabel("Font family")
     }
 
     private var fontSizeStepper: some View {
@@ -126,6 +131,8 @@ struct AnnotationTextStyleControls: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
+            .help("Decrease font size")
+            .accessibilityLabel("Decrease font size")
 
             Divider().frame(height: 13)
 
@@ -136,6 +143,7 @@ struct AnnotationTextStyleControls: View {
                 .multilineTextAlignment(.center)
                 .font(.inspectorNumeric)
                 .frame(width: 30)
+                .accessibilityLabel("Font size")
 
             Divider().frame(height: 13)
 
@@ -149,6 +157,8 @@ struct AnnotationTextStyleControls: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
+            .help("Increase font size")
+            .accessibilityLabel("Increase font size")
         }
         .inspectorField()
     }
@@ -190,6 +200,14 @@ private enum TextStyleSegment: CaseIterable, Hashable {
         }
     }
 
+    var accessibilityTitle: String {
+        switch self {
+        case .bold: "Bold"
+        case .italic: "Italic"
+        case .underline: "Underline"
+        }
+    }
+
     var font: Font {
         switch self {
         case .bold:
@@ -227,6 +245,15 @@ private enum TextAlignmentSegment: CaseIterable, Hashable {
         case .center: .center
         case .right: .right
         case .justified: .justified
+        }
+    }
+
+    var accessibilityTitle: String {
+        switch self {
+        case .left: "Align Left"
+        case .center: "Align Center"
+        case .right: "Align Right"
+        case .justified: "Justify"
         }
     }
 

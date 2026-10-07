@@ -24,7 +24,7 @@ final class ReleaseNotesWindowController: NSObject, NSWindowDelegate {
         if onlyIfNew && notes.isEmpty { return false }
         let view = ReleaseNotesView(version: version, notes: notes) { [weak self] in self?.window?.close() }
         let window = NSWindow(contentViewController: NSHostingController(rootView: view))
-        window.title = "What’s New in BetterShot"
+        window.title = L10n.string("What’s New in BetterShot")
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.setContentSize(NSSize(width: 640, height: 660))
         window.contentMinSize = NSSize(width: 420, height: 420)

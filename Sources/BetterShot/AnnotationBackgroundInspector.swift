@@ -53,7 +53,7 @@ struct AnnotationBackgroundInspector: View {
                         }
                     },
                     label: { library in
-                        Text(library.title)
+                        Text(L10n.string(library.title))
                             .font(.system(size: 10.5, weight: .medium))
                     }
                 )
@@ -103,7 +103,7 @@ struct AnnotationBackgroundInspector: View {
                         settings.shadowStyle = $0
                     },
                     label: { style in
-                        Text(style.title)
+                        Text(L10n.string(style.title))
                             .font(.system(size: 11, weight: .medium))
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
@@ -151,7 +151,8 @@ struct AnnotationBackgroundInspector: View {
                         } content: {
                             Rectangle().fill(color.color)
                         }
-                        .help(color.title)
+                        .help(L10n.string(color.title))
+                        .accessibilityLabel(L10n.string(color.title))
                     }
                 }
 
@@ -170,7 +171,8 @@ struct AnnotationBackgroundInspector: View {
                     } content: {
                         AnnotationBackgroundStageFill(style: .gradient(gradient))
                     }
-                    .help(gradient.title)
+                    .help(L10n.string(gradient.title))
+                    .accessibilityLabel(L10n.string(gradient.title))
                 }
             }
 
@@ -282,7 +284,8 @@ struct AnnotationWallpaperLibraryPicker: View {
     }
 
     private func title(forSourceID id: String) -> String {
-        wallpaperSources.first { $0.id == id }?.title ?? id
+        guard let source = wallpaperSources.first(where: { $0.id == id }) else { return id }
+        return L10n.string(source.title)
     }
 
     private var visibleRecentWallpapers: [AnnotationCustomWallpaper] {
@@ -408,7 +411,7 @@ struct AnnotationWatermarkInspector: View {
 
                     Spacer(minLength: 0)
 
-                    ColorPicker("", selection: watermarkColor, supportsOpacity: false)
+                    ColorPicker("Watermark color", selection: watermarkColor, supportsOpacity: false)
                         .labelsHidden()
                         .controlSize(.small)
                 }
@@ -429,7 +432,7 @@ struct AnnotationWatermarkInspector: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 12)
 
-                Text(hasWatermarkText ? settings.text : "Add watermark")
+                Text(hasWatermarkText ? settings.text : L10n.string("Add watermark"))
                     .font(.inspectorValue)
                     .foregroundColor(hasWatermarkText ? Color.primary.opacity(0.85) : Color.secondary)
                     .lineLimit(1)
@@ -444,7 +447,7 @@ struct AnnotationWatermarkInspector: View {
             .inspectorField(height: 26)
         }
         .buttonStyle(.plain)
-        .help(hasWatermarkText ? "Edit watermark text" : "Add watermark")
+        .help(L10n.string(hasWatermarkText ? "Edit watermark text" : "Add watermark"))
     }
 
     private var watermarkTextField: some View {
@@ -515,6 +518,7 @@ private struct AnnotationAddWallpaperTile: View {
                 .contentShape(RoundedRectangle(cornerRadius: InspectorMetrics.tileRadius, style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Choose wallpaper")
     }
 }
 
@@ -559,7 +563,7 @@ private struct AlignmentPositionPicker: View {
                 .buttonStyle(.plain)
                 .focusEffectDisabled()
                 .disabled(!isEnabled)
-                .help(option.title)
+                .help(L10n.string(option.title))
                 .onHover { isHovering in
                     guard isEnabled else {
                         hoveredAlignment = nil
@@ -571,8 +575,8 @@ private struct AlignmentPositionPicker: View {
                         hoveredAlignment = nil
                     }
                 }
-                .accessibilityLabel("\(option.title) alignment")
-                .accessibilityValue(displayedAlignment == option ? "Selected" : "")
+                .accessibilityLabel(L10n.format("%@ alignment", L10n.string(option.title)))
+                .accessibilityValue(displayedAlignment == option ? L10n.string("Selected") : "")
                 .accessibilityAddTraits(displayedAlignment == option ? .isSelected : [])
             }
         }
@@ -582,7 +586,7 @@ private struct AlignmentPositionPicker: View {
         .overlay(shape.stroke(InspectorControlPalette.border, lineWidth: 0.5))
         .clipShape(shape)
         .opacity(isEnabled ? 1 : 0.46)
-        .help(isEnabled ? "Image alignment" : "Reset Camera to use alignment")
+        .help(L10n.string(isEnabled ? "Image alignment" : "Reset Camera to use alignment"))
         .onChange(of: isEnabled) { _, enabled in
             if !enabled {
                 hoveredAlignment = nil

@@ -208,7 +208,7 @@ final class AnnotationEditorModel {
         smartRedactionMessage = nil
 
         if previewImage == nil || imageSize == .zero {
-            errorMessage = "Unable to load screenshot."
+            errorMessage = L10n.string("Unable to load screenshot.")
         }
 
         markSaved()
@@ -500,7 +500,7 @@ final class AnnotationEditorModel {
         }
 
         guard !renderable.isEmpty else {
-            smartRedactionMessage = "No sensitive text found."
+            smartRedactionMessage = L10n.string("No sensitive text found.")
             return
         }
 
@@ -510,7 +510,10 @@ final class AnnotationEditorModel {
         selectedTool = selectedTool == tool ? .select : tool
         engine.tool = selectedTool
         engine.notifyChanged()
-        smartRedactionMessage = "Added \(renderable.count) redaction\(renderable.count == 1 ? "" : "s")."
+        smartRedactionMessage = L10n.format(
+            renderable.count == 1 ? "Added %lld redaction." : "Added %lld redactions.",
+            renderable.count
+        )
     }
 
     // MARK: - Bounds
@@ -591,12 +594,12 @@ extension AnnotationEditorModel {
         guard !isCropping, !isSmartRedacting, previewImage != nil, let baseImageURL else { return }
         commitTextEditing()
         guard let result = transform.apply(to: baseImageURL) else {
-            errorMessage = "Unable to transform the image. Your image is unchanged. Try again."
+            errorMessage = L10n.string("Unable to transform the image. Your image is unchanged. Try again.")
             return
         }
         guard var snapshot = currentImageSnapshot() else {
             try? FileManager.default.removeItem(at: result.url)
-            errorMessage = "Unable to preserve the image for undo. Try again."
+            errorMessage = L10n.string("Unable to preserve the image for undo. Try again.")
             return
         }
         snapshot.history.redo.removeAll()
@@ -708,13 +711,13 @@ extension AnnotationEditorModel {
 
         guard let baseURL = baseImageURL,
               let result = AnnotationImageCropper.crop(url: baseURL, normalizedRect: crop) else {
-            errorMessage = "Unable to crop the image."
+            errorMessage = L10n.string("Unable to crop the image.")
             return
         }
 
         guard var snapshot = currentImageSnapshot() else {
             try? FileManager.default.removeItem(at: result.url)
-            errorMessage = "Unable to preserve the image for undo. Try again."
+            errorMessage = L10n.string("Unable to preserve the image for undo. Try again.")
             return
         }
 
@@ -778,7 +781,7 @@ extension AnnotationEditorModel {
     private func undoImageChange() {
         guard let previous = imageUndoStack.last else { return }
         guard let current = currentImageSnapshot() else {
-            errorMessage = "Unable to preserve the image for redo. Try again."
+            errorMessage = L10n.string("Unable to preserve the image for redo. Try again.")
             return
         }
         imageUndoStack.removeLast()
@@ -789,7 +792,7 @@ extension AnnotationEditorModel {
     private func redoImageChange() {
         guard let next = imageRedoStack.last else { return }
         guard let current = currentImageSnapshot() else {
-            errorMessage = "Unable to preserve the image for undo. Try again."
+            errorMessage = L10n.string("Unable to preserve the image for undo. Try again.")
             return
         }
         imageRedoStack.removeLast()

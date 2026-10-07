@@ -16,7 +16,7 @@ struct AnnotationScreenshotBorderInspector: View {
                     Text("Color")
                         .font(.inspectorLabel)
                     Spacer()
-                    Text(settings.color.title)
+                    Text(L10n.string(settings.color.title))
                         .font(.inspectorValue)
                 }
                 .foregroundStyle(.secondary)

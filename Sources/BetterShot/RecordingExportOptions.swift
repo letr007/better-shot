@@ -90,7 +90,7 @@ struct RecordingExportOptionsPopover: View {
                 )
             )
 
-            Text(formatHint)
+            Text(L10n.string(formatHint))
                 .font(.inspectorLabel)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -164,7 +164,7 @@ struct RecordingExportOptionsPopover: View {
                 options: options,
                 isSelected: { $0 == selection.wrappedValue },
                 onTap: { selection.wrappedValue = $0 },
-                label: { Text($0.rawValue).font(.inspectorLabel) }
+                label: { Text(L10n.string($0.rawValue)).font(.inspectorLabel) }
             )
         }
     }

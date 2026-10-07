@@ -99,12 +99,12 @@ final class RecordingBarPresenter {
         let restarting = action == .restartRecording
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = restarting ? "Start a new recording?" : "Discard this recording?"
-        alert.informativeText = restarting
+        alert.messageText = L10n.string(restarting ? "Start a new recording?" : "Discard this recording?")
+        alert.informativeText = L10n.string(restarting
             ? "This recording will be discarded and recording will start again."
-            : "This recording will be deleted without saving."
-        alert.addButton(withTitle: "Cancel")
-        alert.addButton(withTitle: restarting ? "Start Over" : "Discard").hasDestructiveAction = true
+            : "This recording will be deleted without saving.")
+        alert.addButton(withTitle: L10n.string("Cancel"))
+        alert.addButton(withTitle: L10n.string(restarting ? "Start Over" : "Discard")).hasDestructiveAction = true
         PreviewWindowCaptureExclusion.shared.register(window: alert.window)
         NSApp.activate(ignoringOtherApps: true)
         // A sheet makes the transparent recording panel's full hosting area visible.

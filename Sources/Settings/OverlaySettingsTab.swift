@@ -20,7 +20,7 @@ struct OverlaySettingsTab: View {
                     set: { if let preset = $0.layout { layoutData = preset.data } }
                 )) {
                     ForEach(OverlayLayoutPreset.allCases) { preset in
-                        Text(preset.title).tag(preset).disabled(preset == .custom)
+                        Text(L10n.string(preset.title)).tag(preset).disabled(preset == .custom)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -30,7 +30,7 @@ struct OverlaySettingsTab: View {
                 }
                 Picker("Card size", selection: $size) {
                     ForEach(OverlayCardSize.allCases) { size in
-                        Text(size.label).tag(size.rawValue)
+                        Text(L10n.string(size.label)).tag(size.rawValue)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -123,9 +123,9 @@ struct OverlayLayoutEditor: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(slot.title): \(layout.assignments[slot]?.title ?? "Empty")")
+                .accessibilityLabel(L10n.format("%@: %@", L10n.string(slot.title), L10n.string(layout.assignments[slot]?.title ?? "Empty")))
                 .accessibilityHint("Choose a tool for this position")
-                .help("\(slot.title): \(layout.assignments[slot]?.title ?? "Empty") — click to change")
+                .help(L10n.format("%@: %@ — click to change", L10n.string(slot.title), L10n.string(layout.assignments[slot]?.title ?? "Empty")))
             }
         }
         .frame(width: size.width, height: size.height)
@@ -133,13 +133,13 @@ struct OverlayLayoutEditor: View {
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.white.opacity(0.2), lineWidth: 0.5))
         .popover(item: $selectedSlot) { slot in
             VStack(alignment: .leading, spacing: 12) {
-                Text(slot.title).font(.headline)
+                Text(L10n.string(slot.title)).font(.headline)
                 Picker("Tool", selection: Binding<OverlayTool?>(
                     get: { layout.assignments[slot] },
                     set: { layout.assign($0, to: slot); selectedSlot = nil }
                 )) {
                     ForEach(OverlayTool.allCases) { tool in
-                        Label(tool.title, systemImage: tool.symbol).tag(Optional(tool))
+                        Label(L10n.string(tool.title), systemImage: tool.symbol).tag(Optional(tool))
                     }
                     Text("Empty").tag(Optional<OverlayTool>.none)
                         .disabled(layout.assignments[slot] == .dismiss)

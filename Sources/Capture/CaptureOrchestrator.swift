@@ -63,7 +63,7 @@ final class CaptureOrchestrator {
                 await processCapturedImage(url, action: .scrollCapture)
             } catch {
                 ToastWindow.shared.show(isError: true, title: "Couldn’t finish scrolling capture",
-                    message: "The image could not be prepared. Select the area and try again. \(error.localizedDescription)",
+                    message: L10n.format("The image could not be prepared. Select the area and try again. %@", error.localizedDescription),
                     systemIcon: "exclamationmark.triangle", duration: 10, on: selectedScreen)
             }
         case .failed:
@@ -163,7 +163,7 @@ final class CaptureOrchestrator {
         let copied = Self.copyText(value, to: pasteboard)
         ScreenCapture.shared.playShutterSound()
         ToastWindow.shared.show(isError: !copied, title: copied ? "Copied" : "Couldn’t copy",
-            message: copied ? (isColor ? "\(value) copied to clipboard" : "Text copied to clipboard") : "Try Copy again.",
+            message: copied ? (isColor ? L10n.format("%@ copied to clipboard", value) : "Text copied to clipboard") : "Try Copy again.",
             systemIcon: isColor ? "eyedropper" : "doc.text.viewfinder", on: captureScreen)
     }
 

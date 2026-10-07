@@ -224,7 +224,7 @@ final class PreviewOverlay {
     private func showSavedToast(count: Int) {
         guard count > 0 else { return }
         ToastWindow.shared.show(
-            message: count == 1 ? "Screenshot saved!" : "\(count) screenshots saved!",
+            message: count == 1 ? L10n.string("Screenshot saved!") : L10n.format("%lld screenshots saved!", Int64(count)),
             icon: NSImage(named: "AppIcon") ?? NSApp.applicationIconImage,
             on: targetScreen
         )
@@ -408,7 +408,7 @@ final class PreviewOverlay {
             defer: false
         )
         panel.identifier = NSUserInterfaceItemIdentifier("BetterShot.CaptureOverlay")
-        panel.title = "Capture overlay"
+        panel.title = L10n.string("Capture overlay")
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
@@ -525,7 +525,7 @@ struct PreviewDeckView: View {
     }
 
     private func deckButton(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(title, action: action)
+        Button(L10n.string(title), action: action)
             .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(.white.opacity(0.9))
             .padding(.horizontal, 8)
@@ -641,14 +641,14 @@ struct PreviewCardView: View {
                             Image(systemName: isVideo ? "play.rectangle" : "photo")
                                 .font(.title2)
                         }
-                        Text(isLoadingThumbnail ? "Loading preview…" : "Open \(isVideo ? "recording" : "image")")
+                        Text(L10n.string(isLoadingThumbnail ? "Loading preview…" : (isVideo ? "Open recording" : "Open image")))
                             .font(.caption)
                     }
                     .frame(width: cardSize.width, height: cardSize.height)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(isVideo ? "Open recording editor" : "Open image editor")
+                .accessibilityLabel(L10n.string(isVideo ? "Open recording editor" : "Open image editor"))
             }
         }
         .focusable()
@@ -663,7 +663,7 @@ struct PreviewCardView: View {
             return .handled
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(isVideo ? "Recording preview" : "Screenshot preview")
+        .accessibilityLabel(L10n.string(isVideo ? "Recording preview" : "Screenshot preview"))
         .task(id: url) { await loadThumbnail() }
         .disabled(overlay.savingItems.contains(url))
         .allowsHitTesting(!overlay.savingItems.contains(url))
@@ -716,8 +716,8 @@ struct PreviewCardView: View {
                     }
                     .buttonStyle(.plain)
                     .focused($focusedAction, equals: tool.rawValue)
-                    .accessibilityLabel(tool.title)
-                    .help(tool.title)
+                    .accessibilityLabel(L10n.string(tool.title))
+                    .help(L10n.string(tool.title))
                 }
             }
         }

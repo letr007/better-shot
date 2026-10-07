@@ -28,6 +28,8 @@ enum ImageTextRecognizer {
 
                 let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
                 do {
+                    let supported = try request.supportedRecognitionLanguages()
+                    request.recognitionLanguages = ["zh-Hans", "zh-Hant", "en-US"].filter(supported.contains)
                     try handler.perform([request])
                     let lines = (request.results as? [VNRecognizedTextObservation])?
                         .compactMap { $0.topCandidates(1).first?.string } ?? []

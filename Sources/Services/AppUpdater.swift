@@ -66,7 +66,7 @@ final class AppUpdater {
                     state = .available(version: latestVersion, url: assetURL)
                     ToastWindow.shared.show(
                         title: "Update Available",
-                        message: "Version \(latestVersion) is available",
+                        message: L10n.format("Version %@ is available", latestVersion),
                         systemIcon: "arrow.down.circle"
                     )
                 }
@@ -101,7 +101,7 @@ final class AppUpdater {
             }
 
             guard httpResponse.statusCode == 200 else {
-                state = .failed("Server returned \(httpResponse.statusCode)")
+                state = .failed(String(format: NSLocalizedString("Server returned %d", comment: "Update HTTP failure"), locale: .current, httpResponse.statusCode))
                 return
             }
 
@@ -174,7 +174,7 @@ final class AppUpdater {
 
             state = .readyToInstall(version: version, dmgPath: dmgPath)
         } catch {
-            state = .failed("Download failed: \(error.localizedDescription)")
+            state = .failed(String(format: NSLocalizedString("Download failed: %@", comment: "Update download failure"), locale: .current, error.localizedDescription))
         }
     }
 
@@ -222,7 +222,7 @@ final class AppUpdater {
             } catch {
                 try? FileManager.default.removeItem(at: currentAppURL)
                 try? FileManager.default.moveItem(at: backupURL, to: currentAppURL)
-                state = .failed("Install failed: \(error.localizedDescription)")
+                state = .failed(String(format: NSLocalizedString("Install failed: %@", comment: "Update installation failure"), locale: .current, error.localizedDescription))
                 return
             }
 
@@ -230,7 +230,7 @@ final class AppUpdater {
 
             relaunchApp(at: currentAppURL)
         } catch {
-            state = .failed("Install failed: \(error.localizedDescription)")
+            state = .failed(String(format: NSLocalizedString("Install failed: %@", comment: "Update installation failure"), locale: .current, error.localizedDescription))
         }
     }
 
@@ -259,7 +259,7 @@ final class AppUpdater {
 
         let status = SecStaticCodeCheckValidity(code, SecCSFlags(rawValue: kSecCSCheckAllArchitectures | kSecCSCheckNestedCode), requirement)
         guard status == errSecSuccess else {
-            return "Update rejected: the downloaded app is not signed by BetterShot (OSStatus \(status))."
+            return String(format: NSLocalizedString("Update rejected: the downloaded app is not signed by BetterShot (OSStatus %d).", comment: "Update signature validation error"), locale: .current, status)
         }
 
         return nil
@@ -291,7 +291,7 @@ final class AppUpdater {
 
                 guard process.terminationStatus == 0 else {
                     continuation.resume(throwing: NSError(domain: "AppUpdater", code: 1, userInfo: [
-                        NSLocalizedDescriptionKey: "Failed to mount DMG (exit code \(process.terminationStatus))"
+                        NSLocalizedDescriptionKey: String(format: NSLocalizedString("Failed to mount DMG (exit code %d)", comment: "Update disk image mounting error"), locale: .current, process.terminationStatus)
                     ]))
                     return
                 }
@@ -302,7 +302,7 @@ final class AppUpdater {
                           let entities = plist["system-entities"] as? [[String: Any]],
                           let mountPoint = entities.first(where: { $0["mount-point"] != nil })?["mount-point"] as? String else {
                         continuation.resume(throwing: NSError(domain: "AppUpdater", code: 2, userInfo: [
-                            NSLocalizedDescriptionKey: "Could not find mount point"
+                            NSLocalizedDescriptionKey: NSLocalizedString("Could not find mount point", comment: "Update disk image mount point missing")
                         ]))
                         return
                     }

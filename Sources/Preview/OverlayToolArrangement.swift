@@ -47,7 +47,7 @@ struct OverlayToolLabel: View {
         if slot.isCenter {
             Group {
                 if tool == .copy || tool == .save {
-                    Text(tool.title)
+                    Text(L10n.string(tool.title))
                 } else {
                     Image(systemName: icon)
                 }

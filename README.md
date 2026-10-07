@@ -109,8 +109,11 @@ selection and saves the selected pixels from that frozen image. **Live Selection
 keeps the displays live and captures after confirmation. Both modes remember the
 last area and support adjustment. Enable **Capture as soon as I let go** to confirm
 on mouse release. Window screenshots and OCR use the native macOS selectors.
-OCR recognizes Simplified Chinese, Traditional Chinese, and English. The menu
-and Settings follow the system language, including Simplified Chinese.
+OCR recognizes Simplified Chinese, Traditional Chinese, and English. The app
+interface follows the system language, with English and Simplified Chinese resources
+for capture controls, Settings, the media gallery, and image and video editors.
+User-entered names, captions, file names, and historical release notes retain their
+original content.
 
 Saved previews dismiss after **Settings > Overlay > Hide After**, pausing while
 you use the card. **Keep screenshot previews open** holds only unsaved captures;

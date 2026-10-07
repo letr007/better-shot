@@ -32,14 +32,14 @@ struct Recording3DInspector: View {
                     }
                     if let shot = model.selected3DShot {
                         HStack(spacing: 8) {
-                            Text(shot.title).font(.callout.weight(.semibold)).lineLimit(2)
+                            Text(L10n.string(shot.title)).font(.callout.weight(.semibold)).lineLimit(2)
                             Spacer(minLength: 0)
                             Toggle("Enable 3D shot", isOn: Binding(get: { shot.isEnabled }, set: { value in change { $0.isEnabled = value } }))
                                 .labelsHidden().toggleStyle(.switch).controlSize(.mini)
                         }
                         HStack(spacing: 8) {
                             Button { model.isPlaying ? model.pause() : model.play3DShot() } label: {
-                                Label(model.isPlaying ? "Pause" : "Play Shot", systemImage: model.isPlaying ? "pause.fill" : "play.fill")
+                                Label(L10n.string(model.isPlaying ? "Pause" : "Play Shot"), systemImage: model.isPlaying ? "pause.fill" : "play.fill")
                             }
                             Spacer(minLength: 0)
                             Button { confirmsRemoval = true } label: { Image(systemName: "trash") }
@@ -47,9 +47,9 @@ struct Recording3DInspector: View {
                         }.buttonStyle(EditorButtonStyle())
 
                     } else {
-                        Text(model.timeline3D.shots.isEmpty
+                        Text(L10n.string(model.timeline3D.shots.isEmpty
                             ? "Arrange a scene automatically, or add a shot at the playhead and choose its look."
-                            : "Select a shot in the timeline to change its look, camera, or timing.")
+                            : "Select a shot in the timeline to change its look, camera, or timing."))
                             .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                         if model.timeline3D.shots.isEmpty {
                             Button("Add a Shot") { model.add3DShot(at: model.currentTime) }
@@ -66,7 +66,7 @@ struct Recording3DInspector: View {
                     VStack(alignment: .leading, spacing: 12) {
                         if section != .blur && section != .keyframes {
                             HStack {
-                                Text(section.rawValue).font(.callout.weight(.semibold))
+                                Text(L10n.string(section.rawValue)).font(.callout.weight(.semibold))
                                     .accessibilityAddTraits(.isHeader)
                                 Spacer(minLength: 0)
                                 if section == .camera { flipControls }
@@ -124,22 +124,22 @@ struct Recording3DInspector: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(alignment: .firstTextBaseline) {
-                                Text(scene.rawValue).font(.callout.weight(.medium))
+                                Text(L10n.string(scene.rawValue)).font(.callout.weight(.medium))
                                 Spacer(minLength: 8)
                                 let count = min(3, max(1, Int(shot.end - shot.start)))
-                                Text("\(count) \(count == 1 ? "shot" : "shots")")
+                                Text(L10n.format(count == 1 ? "%lld shot" : "%lld shots", count))
                                     .font(.caption).monospacedDigit().foregroundStyle(.secondary)
                             }
-                            Text(scene.summary).font(.caption).foregroundStyle(.secondary)
+                            Text(L10n.string(scene.summary)).font(.caption).foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 8)
                     }
                     .buttonStyle(EditorButtonStyle(bordered: true))
-                    .accessibilityLabel(scene.rawValue)
-                    .accessibilityHint(scene.summary + ". Replaces the selected shot.")
-                    .help(scene.summary + ". Replaces this shot’s range; shorter ranges use fewer shots.")
+                    .accessibilityLabel(L10n.string(scene.rawValue))
+                    .accessibilityHint(L10n.format("%@. Replaces the selected shot.", L10n.string(scene.summary)))
+                    .help(L10n.format("%@. Replaces this shot’s range; shorter ranges use fewer shots.", L10n.string(scene.summary)))
                 }
             }
             Text("Scenes replace the selected shot. Auto Scene arranges the whole video.")
@@ -219,12 +219,12 @@ struct Recording3DInspector: View {
                     .frame(height: 76)
                     .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
                     .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(editsEnd == end ? Color.accentColor : EditorChrome.border, lineWidth: editsEnd == end ? 2 : 0.5) }
-                Text(end ? "End" : "Start").font(.caption.weight(.medium))
-                Text((end ? shot.end : shot.start).formatted(.number.precision(.fractionLength(2))) + "s")
+                Text(L10n.string(end ? "End" : "Start")).font(.caption.weight(.medium))
+                Text(L10n.format("%@s", (end ? shot.end : shot.start).formatted(.number.precision(.fractionLength(2)))))
                     .font(.caption2).monospacedDigit().foregroundStyle(.secondary)
             }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
         }.buttonStyle(.plain)
-        .accessibilityLabel(end ? "Edit end camera position" : "Edit start camera position")
+        .accessibilityLabel(L10n.string(end ? "Edit end camera position" : "Edit start camera position"))
         .accessibilityAddTraits(editsEnd == end ? .isSelected : [])
     }
 
@@ -233,7 +233,7 @@ struct Recording3DInspector: View {
             shotSlider("Start (s)", key: \.start, range: model.boundsFor3DShot(shot).lowerBound...(shot.end - Recording3DShot.minimumDuration))
             shotSlider("End (s)", key: \.end, range: (shot.start + Recording3DShot.minimumDuration)...model.boundsFor3DShot(shot).upperBound)
             Picker("Motion", selection: Binding(get: { shot.easing }, set: { value in change { $0.easing = value } })) {
-                ForEach(Recording3DEasing.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(Recording3DEasing.allCases, id: \.self) { Text(L10n.string($0.rawValue)).tag($0) }
             }.pickerStyle(.menu)
             transitionSlider("Ease in (s)", entry: true)
             transitionSlider("Ease out (s)", entry: false)
@@ -370,7 +370,7 @@ struct Recording3DBlurInspector: View {
                 if blur.strength == 0 { blur.strength = 19 }
             }
         })) {
-            ForEach(Recording3DBlur.Mode.allCases.filter { $0 != .none }, id: \.self) { Text($0.rawValue).tag($0) }
+            ForEach(Recording3DBlur.Mode.allCases.filter { $0 != .none }, id: \.self) { Text(L10n.string($0.rawValue)).tag($0) }
         }.labelsHidden()
     }
     private func change(_ edit: (inout Recording3DBlur) -> Void) {
@@ -408,19 +408,19 @@ struct Recording3DAutoScenePicker: View {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(Array(shots.enumerated()), id: \.offset) { index, shot in
                     HStack {
-                        Text("\(index + 1). \(shot.title)").lineLimit(1)
+                        Text(L10n.format("%lld. %@", index + 1, L10n.string(shot.title))).lineLimit(1)
                         Spacer(minLength: 8)
                         Text("\((shot.end - shot.start).formatted(.number.precision(.fractionLength(1))))s")
                             .monospacedDigit().foregroundStyle(.secondary)
                     }.font(.callout)
                 }
             }
-            Text(maximum == 0 ? "Auto Scene needs at least one second. You can still add a shot manually."
+            Text(L10n.string(maximum == 0 ? "Auto Scene needs at least one second. You can still add a shot manually."
                 : model.suggested3DScene == nil ? "Preview first. Apply when you’re happy with the sequence."
-                : "Preview only — your existing shots are unchanged until you apply.")
+                : "Preview only — your existing shots are unchanged until you apply."))
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
-                Button(model.suggested3DScene != nil && model.isPlaying ? "Pause" : "Preview") {
+                Button(L10n.string(model.suggested3DScene != nil && model.isPlaying ? "Pause" : "Preview")) {
                     if model.suggested3DScene != nil && model.isPlaying { model.pause() }
                     else { model.previewAuto3DScene(count: count) }
                 }.disabled(maximum == 0)
@@ -468,17 +468,17 @@ private struct Recording3DLookTile: View {
                                 .accessibilityHidden(true)
                         }
                     }
-                Text(preset.rawValue).font(.system(size: 11, weight: selected ? .semibold : .regular))
+                Text(L10n.string(preset.rawValue)).font(.system(size: 11, weight: selected ? .semibold : .regular))
                     .lineLimit(1).frame(maxWidth: .infinity)
             }.contentShape(Rectangle())
         }
         .buttonStyle(.plain).focused($focused)
         .onHover { hovered = $0 }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: hovered || focused)
-        .accessibilityLabel(preset.rawValue)
+        .accessibilityLabel(L10n.string(preset.rawValue))
         .accessibilityHint("Apply this look to the selected shot")
         .accessibilityAddTraits(selected ? .isSelected : [])
-        .help(preset.rawValue)
+        .help(L10n.string(preset.rawValue))
     }
 }
 

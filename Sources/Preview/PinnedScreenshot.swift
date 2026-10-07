@@ -185,7 +185,7 @@ struct PinnedScreenshotView: View {
         }
         // Right-click context menu
         .contextMenu {
-            Button(copyTitle) {
+            Button(NSLocalizedString(copyTitle, comment: "Pinned capture copy action")) {
                 let pb = NSPasteboard.general
                 pb.clearContents()
                 switch media {

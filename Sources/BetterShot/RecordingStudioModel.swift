@@ -281,7 +281,7 @@ final class RecordingStudioModel {
             }
             hasRecordedAudio = tracks.contains { $0.mediaType == .audio }
         } catch {
-            loadError = "Could not open the recording: \(error.localizedDescription)"
+            loadError = L10n.format("Could not open the recording: %@", error.localizedDescription)
             return
         }
 
@@ -370,7 +370,7 @@ final class RecordingStudioModel {
         do {
             try rebuildScreenPlayerItem(preserving: 0)
         } catch {
-            loadError = "Could not prepare the recording timeline: \(error.localizedDescription)"
+            loadError = L10n.format("Could not prepare the recording timeline: %@", error.localizedDescription)
             return
         }
         rebuildPointerTimeline()
@@ -763,7 +763,7 @@ final class RecordingStudioModel {
                 hoverPreviewTime = min(max(hoverTime, 0), duration)
             }
         } catch {
-            loadError = "Could not update the recording timeline: \(error.localizedDescription)"
+            loadError = L10n.format("Could not update the recording timeline: %@", error.localizedDescription)
         }
         updateActiveTranscriptWord()
         scheduleProjectSave()
@@ -845,7 +845,7 @@ final class RecordingStudioModel {
         editUndoManager.registerUndo(withTarget: self) { target in
             operation(target)
         }
-        editUndoManager.setActionName(actionName)
+        editUndoManager.setActionName(L10n.string(actionName))
         undoRevision &+= 1
     }
 
@@ -1008,7 +1008,7 @@ final class RecordingStudioModel {
             return
         }
         guard let range = timeline3D.insertionRange(at: time, duration: duration) else {
-            shot3DError = "No room here. Shorten a neighboring 3D shot or choose another time."
+            shot3DError = L10n.string("No room here. Shorten a neighboring 3D shot or choose another time.")
             return
         }
         let length = range.upperBound - range.lowerBound
@@ -1053,7 +1053,7 @@ final class RecordingStudioModel {
         let range = replacesAll ? 0...duration : selected3DShot.map { $0.start...$0.end } ?? 0...duration
         let shots = Recording3DTimeline.scene(presets, in: range, weights: weights, showcaseFinish: showcaseFinish, clipCuts: sceneClipCuts)
         guard !shots.isEmpty else {
-            shot3DError = "This range is too short. Allow at least 0.2 seconds per shot."
+            shot3DError = L10n.string("This range is too short. Allow at least 0.2 seconds per shot.")
             return
         }
         let remaining = replacesAll ? [] : shots3D.filter { $0.end <= range.lowerBound || $0.start >= range.upperBound }
@@ -2523,7 +2523,7 @@ final class RecordingStudioModel {
                 removeStoredReplacementAudio(in: session)
                 try FileManager.default.copyItem(at: pickedURL, to: destination)
             } catch {
-                replacementAudioError = "Could not import that file: \(error.localizedDescription)"
+                replacementAudioError = L10n.format("Could not import that file: %@", error.localizedDescription)
                 clearReplacementAudio()
                 return
             }
@@ -2544,7 +2544,7 @@ final class RecordingStudioModel {
                 if let session = self.session {
                     self.removeStoredReplacementAudio(in: session)
                 }
-                self.replacementAudioError = "That file has no audio track."
+                self.replacementAudioError = L10n.string("That file has no audio track.")
                 self.clearReplacementAudio()
                 return
             }
@@ -2577,7 +2577,7 @@ final class RecordingStudioModel {
         do {
             try rebuildScreenPlayerItem(preserving: currentTime)
         } catch {
-            loadError = "Could not update the recording timeline: \(error.localizedDescription)"
+            loadError = L10n.format("Could not update the recording timeline: %@", error.localizedDescription)
         }
         scheduleProjectSave()
     }

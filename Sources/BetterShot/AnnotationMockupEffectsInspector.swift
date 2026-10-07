@@ -23,18 +23,18 @@ struct AnnotationProgressiveBlurInspector: View {
                     },
                     label: { edgeMode in
                         Label(
-                            edgeMode.title,
+                            L10n.string(edgeMode.title),
                             systemImage: edgeMode == .clipped
                                 ? "photo"
                                 : "rectangle.stack"
                         )
                         .font(.system(size: 10.5, weight: .medium))
                         .labelStyle(.titleAndIcon)
-                        .help(
+                        .help(L10n.string(
                             edgeMode == .clipped
                                 ? "Blur only the screenshot content inside its frame"
                                 : "Blur the transformed screenshot together with its background"
-                        )
+                        ))
                     }
                 )
             }
@@ -50,7 +50,7 @@ struct AnnotationProgressiveBlurInspector: View {
                         settings.mode = mode
                     },
                     label: { mode in
-                        Label(mode.title, systemImage: mode == .radial ? "scope" : "line.diagonal")
+                        Label(L10n.string(mode.title), systemImage: mode == .radial ? "scope" : "line.diagonal")
                             .font(.system(size: 10.5, weight: .medium))
                             .labelStyle(.titleAndIcon)
                     }
@@ -78,11 +78,11 @@ struct AnnotationProgressiveBlurInspector: View {
                     range: 0...1,
                     format: .percent()
                 )
-                .help(
+                .help(L10n.string(
                     settings.edgeMode == .clipped
                         ? "Choose the size of the sharp area inside the frame"
                         : "Choose the size of the sharp area across the scene"
-                )
+                ))
 
                 if settings.mode == .directional {
                     InspectorSlider(

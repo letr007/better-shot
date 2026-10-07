@@ -184,7 +184,7 @@ final class R2CredentialStore {
         case errSecAuthFailed, errSecUserCanceled, errSecInteractionNotAllowed:
             "macOS asked for your Mac login password to unlock these keys and the request was cancelled."
         default:
-            "The Keychain refused to open these keys (error \(status))."
+            String(format: NSLocalizedString("The Keychain refused to open these keys (error %d).", comment: "Keychain access error"), locale: .current, status)
         }
     }
 

@@ -38,8 +38,8 @@ struct AnnotationSwatchStrip: View {
             )
         }
         .buttonStyle(.plain)
-        .help(swatch.title)
-        .accessibilityLabel(swatch.title)
+        .help(L10n.string(swatch.title))
+        .accessibilityLabel(L10n.string(swatch.title))
         .accessibilityAddTraits(selectedSwatch == swatch ? .isSelected : [])
     }
 

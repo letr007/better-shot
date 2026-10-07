@@ -138,7 +138,7 @@ struct InspectorSection<Content: View, Accessory: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: InspectorMetrics.headerSpacing) {
             HStack(spacing: 6) {
-                Text(title)
+                Text(L10n.string(title))
                     .font(.inspectorSectionHeader)
                     .foregroundStyle(.primary.opacity(0.85))
 
@@ -178,7 +178,7 @@ struct InspectorDisclosureSection<Content: View, Accessory: View>: View {
             HStack(spacing: 6) {
                 Button(action: toggleExpansion) {
                     HStack(spacing: 6) {
-                        Text(title)
+                        Text(L10n.string(title))
                             .font(.inspectorSectionHeader)
                             .foregroundStyle(.primary.opacity(0.88))
 
@@ -188,9 +188,9 @@ struct InspectorDisclosureSection<Content: View, Accessory: View>: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(title)
-                .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
-                .accessibilityHint(isExpanded ? "Collapse section" : "Expand section")
+                .accessibilityLabel(L10n.string(title))
+                .accessibilityValue(L10n.string(isExpanded ? "Expanded" : "Collapsed"))
+                .accessibilityHint(L10n.string(isExpanded ? "Collapse section" : "Expand section"))
 
                 accessory()
 
@@ -278,7 +278,7 @@ struct InspectorClearButton: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .help(help)
+        .help(L10n.string(help))
         .onHover { isHovering = $0 }
     }
 }
@@ -291,7 +291,7 @@ struct InspectorGroupLabel: View {
     init(_ title: String) { self.title = title }
 
     var body: some View {
-        Text(title)
+        Text(L10n.string(title))
             .font(.inspectorLabel)
             .foregroundStyle(.secondary)
     }
@@ -309,7 +309,7 @@ struct InspectorRow<Content: View>: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Text(title)
+            Text(L10n.string(title))
                 .font(.inspectorLabel)
                 .foregroundStyle(.secondary)
                 .frame(width: InspectorMetrics.labelColumnWidth, alignment: .leading)

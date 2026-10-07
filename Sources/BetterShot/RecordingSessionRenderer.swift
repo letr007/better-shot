@@ -17,7 +17,7 @@ enum RecordingSessionRenderer {
         case missingCameraTrack
 
         var errorDescription: String? {
-            "The camera recording does not contain a readable video track."
+            NSLocalizedString("The camera recording does not contain a readable video track.", comment: "Missing camera video track")
         }
     }
 

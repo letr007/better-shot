@@ -78,7 +78,7 @@ struct SharingSettingsTab: View {
                             .foregroundStyle(.green)
                             .font(.callout)
                     case .failed(let message):
-                        Label(message, systemImage: "exclamationmark.triangle.fill")
+                        Label(L10n.string(message), systemImage: "exclamationmark.triangle.fill")
                             .foregroundStyle(.red)
                             .font(.callout)
                             .lineLimit(3)
@@ -103,7 +103,7 @@ struct SharingSettingsTab: View {
                 .onChange(of: useDirectLinks) { _, isOn in directLinksToggled(isOn) }
 
                 if let directLinksProblem {
-                    Label(directLinksProblem, systemImage: "exclamationmark.triangle.fill")
+                    Label(L10n.string(directLinksProblem), systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.red)
                         .font(.callout)
                         .fixedSize(horizontal: false, vertical: true)
@@ -135,7 +135,7 @@ struct SharingSettingsTab: View {
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(.orange)
 
-                Text("\(R2CredentialStore.explain(status)) This happens after BetterShot is rebuilt or reinstalled. Clear the old keys and paste them in again.")
+                Text(L10n.format("%@ This happens after BetterShot is rebuilt or reinstalled. Clear the old keys and paste them in again.", L10n.string(R2CredentialStore.explain(status))))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -172,9 +172,9 @@ struct SharingSettingsTab: View {
     private func statusLabel(_ title: String, detail: String, systemImage: String, tint: Color) -> some View {
         Label {
             VStack(alignment: .leading, spacing: 3) {
-                Text(title)
+                Text(L10n.string(title))
                     .font(.callout.weight(.semibold))
-                Text(detail)
+                Text(L10n.string(detail))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -206,7 +206,7 @@ struct SharingSettingsTab: View {
                     }
 
                 if showPublicURLProblem, let publicURLProblem {
-                    Label(publicURLProblem.message, systemImage: "exclamationmark.triangle.fill")
+                    Label(L10n.string(publicURLProblem.message), systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.red)
                         .font(.callout)
                         .fixedSize(horizontal: false, vertical: true)
@@ -259,8 +259,8 @@ struct SharingSettingsTab: View {
     }
 
     private func credentialField(_ label: String, text: Binding<String>, prompt: String) -> some View {
-        LabeledContent(label) {
-            TextField(label, text: text, prompt: Text(prompt))
+        LabeledContent(L10n.string(label)) {
+            TextField(L10n.string(label), text: text, prompt: Text(L10n.string(prompt)))
                 .labelsHidden()
                 .textFieldStyle(.roundedBorder)
                 .onChange(of: text.wrappedValue) { _, _ in save() }
@@ -268,8 +268,8 @@ struct SharingSettingsTab: View {
     }
 
     private func secureField(_ label: String, text: Binding<String>, prompt: String) -> some View {
-        LabeledContent(label) {
-            SecureField(label, text: text, prompt: Text(prompt))
+        LabeledContent(L10n.string(label)) {
+            SecureField(L10n.string(label), text: text, prompt: Text(L10n.string(prompt)))
                 .labelsHidden()
                 .textFieldStyle(.roundedBorder)
                 .onChange(of: text.wrappedValue) { _, _ in save() }

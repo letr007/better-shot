@@ -25,7 +25,7 @@ struct AnnotationBackgroundPresetBar: View {
     }
 
     private var displayTitle: String {
-        appliedPreset?.name ?? "Presets…"
+        appliedPreset?.name ?? L10n.string("Presets…")
     }
 
     private var isAppliedPresetModified: Bool {
@@ -51,8 +51,8 @@ struct AnnotationBackgroundPresetBar: View {
             if let appliedPreset {
                 PresetBarIconButton(
                     systemImage: "trash",
-                    accessibilityLabel: "Delete \(appliedPreset.name)",
-                    help: "Delete \(appliedPreset.name)"
+                    accessibilityLabel: L10n.format("Delete %@", appliedPreset.name),
+                    help: L10n.format("Delete %@", appliedPreset.name)
                 ) {
                     onEditorAction()
                     presetPendingDeletion = appliedPreset
@@ -63,8 +63,8 @@ struct AnnotationBackgroundPresetBar: View {
 
             PresetBarIconButton(
                 systemImage: "plus",
-                accessibilityLabel: "Add Preset",
-                help: "Save current settings as a preset"
+                accessibilityLabel: L10n.string("Add Preset"),
+                help: L10n.string("Save current settings as a preset")
             ) {
                 onEditorAction()
                 draftName = ""
@@ -136,18 +136,18 @@ struct AnnotationBackgroundPresetBar: View {
 
     private var presetHelp: String {
         if let activePreset = presetStore.activePreset {
-            return "Choose a preset. \(activePreset.name) is applied to new screenshots."
+            return L10n.format("Choose a preset. %@ is applied to new screenshots.", activePreset.name)
         }
-        return "Choose a background, layout, camera, blur, border, and watermark preset"
+        return L10n.string("Choose a background, layout, camera, blur, border, and watermark preset")
     }
 
     private var presetAccessibilityValue: String {
         var details = [displayTitle]
         if isAppliedPresetModified {
-            details.append("modified")
+            details.append(L10n.string("modified"))
         }
         if appliedPreset?.hasMissingWallpaper == true {
-            details.append("wallpaper missing")
+            details.append(L10n.string("wallpaper missing"))
         }
         return details.joined(separator: ", ")
     }
@@ -286,7 +286,7 @@ private struct AnnotationPresetPopUpButton: NSViewRepresentable {
             )
             displayItem.isEnabled = parent.isEnabled
             (button.cell as? NSPopUpButtonCell)?.menuItem = displayItem
-            button.setAccessibilityLabel("Background preset")
+            button.setAccessibilityLabel(L10n.string("Background preset"))
             button.setAccessibilityValue(parent.accessibilityValue)
         }
 
@@ -298,17 +298,17 @@ private struct AnnotationPresetPopUpButton: NSViewRepresentable {
             let missingPresets = parent.presets.filter(\.hasMissingWallpaper)
 
             if availablePresets.isEmpty && missingPresets.isEmpty {
-                let emptyItem = NSMenuItem(title: "No Saved Presets", action: nil, keyEquivalent: "")
+                let emptyItem = NSMenuItem(title: L10n.string("No Saved Presets"), action: nil, keyEquivalent: "")
                 emptyItem.isEnabled = false
                 menu.addItem(emptyItem)
                 return menu
             }
 
             if !availablePresets.isEmpty {
-                menu.addItem(.sectionHeader(title: "Saved Presets"))
+                menu.addItem(.sectionHeader(title: L10n.string("Saved Presets")))
 
                 let currentItem = NSMenuItem(
-                    title: "Current Settings",
+                    title: L10n.string("Current Settings"),
                     action: #selector(selectCurrentSettings(_:)),
                     keyEquivalent: ""
                 )
@@ -330,7 +330,7 @@ private struct AnnotationPresetPopUpButton: NSViewRepresentable {
                 if !availablePresets.isEmpty {
                     menu.addItem(.separator())
                 }
-                menu.addItem(.sectionHeader(title: "Wallpaper Missing"))
+                menu.addItem(.sectionHeader(title: L10n.string("Wallpaper Missing")))
 
                 for preset in missingPresets {
                     let item = presetItem(
@@ -338,7 +338,7 @@ private struct AnnotationPresetPopUpButton: NSViewRepresentable {
                         action: #selector(deletePreset(_:)),
                         isSelected: false
                     )
-                    item.title = "Delete “\(preset.name)”…"
+                    item.title = L10n.format("Delete “%@”…", preset.name)
                     item.image = NSImage(systemSymbolName: "trash", accessibilityDescription: nil)
                     menu.addItem(item)
                 }
@@ -347,7 +347,7 @@ private struct AnnotationPresetPopUpButton: NSViewRepresentable {
             if !availablePresets.isEmpty {
                 menu.addItem(.separator())
 
-                let defaultItem = NSMenuItem(title: "Default Preset", action: nil, keyEquivalent: "")
+                let defaultItem = NSMenuItem(title: L10n.string("Default Preset"), action: nil, keyEquivalent: "")
                 defaultItem.submenu = makeDefaultMenu(presets: availablePresets)
                 menu.addItem(defaultItem)
             }
@@ -356,11 +356,11 @@ private struct AnnotationPresetPopUpButton: NSViewRepresentable {
         }
 
         private func makeDefaultMenu(presets: [AnnotationBackgroundPreset]) -> NSMenu {
-            let menu = NSMenu(title: "Default Preset")
+            let menu = NSMenu(title: L10n.string("Default Preset"))
             menu.autoenablesItems = false
 
             let noneItem = NSMenuItem(
-                title: "None",
+                title: L10n.string("None"),
                 action: #selector(clearDefaultPreset(_:)),
                 keyEquivalent: ""
             )

@@ -15,8 +15,8 @@ struct StudioInspectorTabs: View {
                 }
                 .buttonStyle(EditorButtonStyle(selected: selection == tab))
                 .disabled(!isAvailable(tab))
-                .help(tab.title)
-                .accessibilityLabel(tab.title)
+                .help(L10n.string(tab.title))
+                .accessibilityLabel(L10n.string(tab.title))
                 .accessibilityIdentifier("video-inspector-\(tab.rawValue)")
                 .accessibilityAddTraits(selection == tab ? .isSelected : [])
             }
@@ -39,7 +39,7 @@ struct StudioEffectSection<Content: View, Accessory: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                Label(title, systemImage: systemImage)
+                Label(L10n.string(title), systemImage: systemImage)
                     .font(.system(size: 12, weight: .medium))
                 Spacer(minLength: 4)
                 accessory()
@@ -65,10 +65,10 @@ struct StudioAmountEffect: View {
     var body: some View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
-                Label(title, systemImage: systemImage)
+                Label(L10n.string(title), systemImage: systemImage)
                     .font(.system(size: 12, weight: .medium))
                 Spacer(minLength: 4)
-                Toggle(title, isOn: Binding(
+                Toggle(L10n.string(title), isOn: Binding(
                     get: { value > 0 },
                     set: { enabled in
                         value = toggleState.amount(enabled: enabled, current: value, defaultValue: defaultValue)
@@ -77,7 +77,7 @@ struct StudioAmountEffect: View {
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .controlSize(.mini)
-                .help("Enable \(title.lowercased())")
+                .help(L10n.format("Enable %@", L10n.string(title)))
             }
             InspectorSlider("Amount", value: $value, range: range, format: .percent())
         }

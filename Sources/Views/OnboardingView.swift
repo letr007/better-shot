@@ -36,7 +36,7 @@ struct OnboardingView: View {
                             case .ready: ready
                             }
                             if let errorMessage {
-                                Label(errorMessage, systemImage: "exclamationmark.triangle")
+                                Label(L10n.string(errorMessage), systemImage: "exclamationmark.triangle")
                                     .font(.callout).foregroundStyle(.red)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
@@ -81,7 +81,7 @@ struct OnboardingView: View {
             Button("Skip Setup") { OnboardingWindowController.shared.finish(openCaptureBar: true) }
                 .buttonStyle(EditorButtonStyle())
                 .keyboardShortcut(.cancelAction)
-            Button(nextTitle) {
+            Button(L10n.string(nextTitle)) {
                 if step == .ready {
                     OnboardingWindowController.shared.finish(openCaptureBar: true)
                 } else {
@@ -183,9 +183,9 @@ struct OnboardingView: View {
             shortcutRow("Open capture bar", symbol: "rectangle.bottomthird.inset.filled", action: .recording)
             if permissions.status(.accessibility) != .allowed || permissions.shortcutsNeedRestart {
                 HStack(alignment: .top, spacing: 12) {
-                    Text(permissions.shortcutsNeedRestart
+                    Text(L10n.string(permissions.shortcutsNeedRestart
                          ? "Reopen BetterShot to activate shortcuts. The clover menu works now."
-                         : "Shortcuts need Accessibility access. The clover menu works without it.")
+                         : "Shortcuts need Accessibility access. The clover menu works without it."))
                         .font(.callout).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
@@ -224,7 +224,7 @@ struct OnboardingView: View {
             .accessibilityHint("Opens a separate copy in the image editor. No screen access needed.")
             DisclosureGroup("Watch a short demo") {
                 Picker("Explore BetterShot", selection: $demo) {
-                    ForEach(OnboardingDemo.allCases) { demo in Text(demo.title).tag(demo) }
+                    ForEach(OnboardingDemo.allCases) { demo in Text(L10n.string(demo.title)).tag(demo) }
                 }.pickerStyle(.segmented)
                 OnboardingDemoView(demo: demo, resourceBundle: resourceBundle).id(demo)
             }
@@ -235,8 +235,8 @@ struct OnboardingView: View {
 
     private func heading(_ title: String, detail: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.system(size: 30, weight: .semibold)).accessibilityAddTraits(.isHeader)
-            Text(detail).font(.system(size: 14)).foregroundStyle(.secondary)
+            Text(L10n.string(title)).font(.system(size: 30, weight: .semibold)).accessibilityAddTraits(.isHeader)
+            Text(L10n.string(detail)).font(.system(size: 14)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .multilineTextAlignment(.leading)
@@ -246,7 +246,7 @@ struct OnboardingView: View {
     private func shortcutRow(_ title: String, symbol: String, action: ShortcutService.Action) -> some View {
         HStack(spacing: 14) {
             Image(systemName: symbol).frame(width: 24).foregroundStyle(.secondary).accessibilityHidden(true)
-            Text(title)
+            Text(L10n.string(title))
             Spacer()
             shortcutValue(action, size: 15)
         }

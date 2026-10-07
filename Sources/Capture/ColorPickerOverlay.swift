@@ -6,7 +6,7 @@ final class ColorPickerOverlay {
         case unsupportedColor
 
         var errorDescription: String? {
-            "This color couldn’t be converted to RGB. Try picking another pixel."
+            NSLocalizedString("This color couldn’t be converted to RGB. Try picking another pixel.", comment: "Color picking error")
         }
     }
 

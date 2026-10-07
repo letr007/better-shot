@@ -12,7 +12,9 @@ import simd
 nonisolated enum Recording3DBlurRenderer {
     enum Failure: LocalizedError {
         case unavailable
-        var errorDescription: String? { "The GPU could not prepare the 3D focus effect. Try reopening the editor or switch Depth Blur to None." }
+        var errorDescription: String? {
+            NSLocalizedString("The GPU could not prepare the 3D focus effect. Try reopening the editor or switch Depth Blur to None.", comment: "GPU depth blur error")
+        }
     }
     private static let kernels: [CIKernel] = (try? CIKernel.kernels(withMetalString: source)) ?? []
 

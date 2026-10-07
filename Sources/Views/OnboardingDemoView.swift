@@ -35,30 +35,32 @@ struct OnboardingDemoView: View {
                 if let player {
                     VideoPlayer(player: player)
                         .onAppear { player.play() }
-                        .accessibilityLabel("\(demo.title) demonstration")
+                        .accessibilityLabel(L10n.format("%@ demonstration", L10n.string(demo.title)))
                 } else if let url = demo.url(extension: "png", in: resourceBundle),
                           let image = NSImage(contentsOf: url) {
                     Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
-                        .accessibilityLabel(demo.imageDescription)
+                        .accessibilityLabel(L10n.string(demo.imageDescription))
                 } else {
-                    Text(demo.imageDescription).padding().frame(maxWidth: .infinity, maxHeight: .infinity)
+                    Text(L10n.string(demo.imageDescription)).padding().frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
             .aspectRatio(16 / 9, contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(EditorChrome.border) }
-            Text(demo.caption).font(.callout).foregroundStyle(.secondary)
+            Text(L10n.string(demo.caption)).font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button {
                 wantsPlayback.toggle()
             } label: {
-                Label(wantsPlayback ? "Close Demo" : "Watch Demo · 6 sec",
+                Label(L10n.string(wantsPlayback ? "Close Demo" : "Watch Demo · 6 sec"),
                       systemImage: wantsPlayback ? "xmark.circle" : "play.circle")
             }
             .buttonStyle(EditorButtonStyle())
-            .accessibilityLabel(wantsPlayback ? "Close \(demo.title) demo" : "Watch \(demo.title) demo, 6 seconds")
+            .accessibilityLabel(wantsPlayback
+                ? L10n.format("Close %@ demo", L10n.string(demo.title))
+                : L10n.format("Watch %@ demo, 6 seconds", L10n.string(demo.title)))
             if let errorMessage {
-                Text(errorMessage).font(.caption).foregroundStyle(.red)
+                Text(L10n.string(errorMessage)).font(.caption).foregroundStyle(.red)
             }
         }
         .task(id: wantsPlayback) {

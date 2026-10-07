@@ -483,7 +483,7 @@ final class RecordingClipTimelineControl: NSView {
         let menu = NSMenu()
         menu.autoenablesItems = false
         let split = NSMenuItem(
-            title: "Split Clip Here",
+            title: L10n.string("Split Clip Here"),
             action: #selector(splitFromContextMenu),
             keyEquivalent: ""
         )
@@ -495,7 +495,7 @@ final class RecordingClipTimelineControl: NSView {
         menu.addItem(.separator())
 
         let delete = NSMenuItem(
-            title: "Delete Clip",
+            title: L10n.string("Delete Clip"),
             action: #selector(deleteFromContextMenu),
             keyEquivalent: ""
         )

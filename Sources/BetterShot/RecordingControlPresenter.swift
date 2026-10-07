@@ -51,7 +51,7 @@ struct RecordingSessionControls: View {
                     } else {
                         Image(systemName: "stop.fill").font(.system(size: 12, weight: .semibold))
                     }
-                    Text(manager.state == .finishing ? "Saving" : manager.state == .starting ? "Preparing" : "Stop")
+                    Text(L10n.string(manager.state == .finishing ? "Saving" : manager.state == .starting ? "Preparing" : "Stop"))
                         .font(.system(size: 12, weight: .semibold))
                     Text(manager.formattedElapsedTime)
                         .font(.system(size: 13, weight: .medium).monospacedDigit())
@@ -66,7 +66,7 @@ struct RecordingSessionControls: View {
             .buttonStyle(BarButtonStyle())
             .disabled(isSettling)
             .help("Stop and save the recording")
-            .accessibilityLabel("Stop and save recording, \(manager.formattedElapsedTime) elapsed")
+            .accessibilityLabel(L10n.format("Stop and save recording, %@ elapsed", manager.formattedElapsedTime))
 
             separator
             BarActionButton(

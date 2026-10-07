@@ -80,7 +80,7 @@ extension ShortcutService {
             let panel = NSOpenPanel()
             panel.allowedContentTypes = [.image]
             panel.allowsMultipleSelection = true
-            panel.message = "Choose images to annotate in BetterShot."
+            panel.message = L10n.string("Choose images to annotate in BetterShot.")
             NSApp.activate(ignoringOtherApps: true)
             if panel.runModal() == .OK {
                 panel.urls.forEach { PreviewPanelPresenter.shared.openEditor(for: $0) }
@@ -93,10 +93,10 @@ extension ShortcutService {
             let overlay = PreviewOverlay.shared
             if overlay.hasStagedItems {
                 let alert = NSAlert()
-                alert.messageText = "Close all captures in the deck?"
-                alert.informativeText = "Unsaved captures in the deck will be discarded. Saved files are kept."
-                alert.addButton(withTitle: "Cancel")
-                alert.addButton(withTitle: "Discard Unsaved Captures")
+                alert.messageText = L10n.string("Close all captures in the deck?")
+                alert.informativeText = L10n.string("Unsaved captures in the deck will be discarded. Saved files are kept.")
+                alert.addButton(withTitle: L10n.string("Cancel"))
+                alert.addButton(withTitle: L10n.string("Discard Unsaved Captures"))
                 NSApp.activate(ignoringOtherApps: true)
                 guard alert.runModal() == .alertSecondButtonReturn else { return }
             }
