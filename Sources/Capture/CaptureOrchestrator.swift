@@ -32,24 +32,40 @@ final class CaptureOrchestrator {
     }
 
     private func executeCapture(_ action: ShortcutService.Action) async {
-        switch action {
-        case .region:
-            if AppPreferences.regionCaptureMode == .frozen {
-                await captureRegionFrozen(on: captureScreen)
-            } else {
-                await captureAndProcess { try await ScreenCapture.shared.captureRegion() }
+        do {
+            switch action {
+            case .region:
+                if AppPreferences.regionCaptureMode == .frozen {
+                    try await captureRegionFrozen(on: captureScreen)
+                } else {
+                    await captureAndProcess { try await ScreenCapture.shared.captureRegion() }
+                }
+            case .fullscreen:
+                await captureAndProcess { try await ScreenCapture.shared.captureFullscreen() }
+            case .window:
+                await captureAndProcess { try await ScreenCapture.shared.captureWindow() }
+            case .longScreenshot:
+                try await captureLongScreenshot(on: captureScreen)
+            case .ocr:
+                await performOCR()
+            case .colorPicker:
+                await performColorPick()
+            case .recording:
+                break
             }
-        case .fullscreen:
-            await captureAndProcess { try await ScreenCapture.shared.captureFullscreen() }
-        case .window:
-            await captureAndProcess { try await ScreenCapture.shared.captureWindow() }
-        case .ocr:
-            await performOCR()
-        case .colorPicker:
-            await performColorPick()
-        case .recording:
-            break
+        } catch {
+            showCaptureError(error)
         }
+    }
+
+    private func showCaptureError(_ error: Error) {
+        print("Capture failed: \(error.localizedDescription)")
+        ToastWindow.shared.show(
+            title: L10n.string("Screenshot Failed"),
+            message: error.localizedDescription,
+            systemIcon: "exclamationmark.triangle",
+            on: captureScreen
+        )
     }
 
     // MARK: - Private
@@ -65,23 +81,19 @@ final class CaptureOrchestrator {
 
             ScreenCapture.shared.playShutterSound()
 
-            let record = HistoryStore.shared.importCapture(from: url)
-            if let record {
-                lastCaptureURL = HistoryStore.shared.urlForRecord(record)
-            }
-
-            guard let capturedURL = lastCaptureURL else { return }
-
-            await galleryApplyAndSave(capturedURL, recordID: record?.id)
+            guard let record = HistoryStore.shared.importCapture(from: url) else { return }
+            let capturedURL = HistoryStore.shared.urlForRecord(record)
+            lastCaptureURL = capturedURL
+            await galleryApplyAndSave(capturedURL, recordID: record.id)
         } catch {
-            print("Capture failed: \(error.localizedDescription)")
+            showCaptureError(error)
         }
     }
 
 
     /// Freeze-then-select region capture: grab a non-interactive full-screen frame,
     /// let the user pick a region on the frozen image, then crop and process.
-    private func captureRegionFrozen(on screen: NSScreen?) async {
+    private func captureRegionFrozen(on screen: NSScreen?) async throws {
         let delay = AppPreferences.selfTimerDelay
         if delay != .off {
             await CountdownOverlay.shared.showCountdown(seconds: delay.rawValue)
@@ -92,12 +104,11 @@ final class CaptureOrchestrator {
             ?? NSScreen.main
         guard let targetScreen else { return }
 
-        try? await Task.sleep(for: .milliseconds(200))
+        MenuBarPopoverController.shared.closePopover()
+        try await Task.sleep(for: .milliseconds(200))
 
-        guard let frozenImage = ScreenCapture.shared.captureDisplayImage(on: targetScreen) else {
-            print("Capture failed: could not grab frozen frame")
-            return
-        }
+        let displayCapture = try await ScreenCapture.shared.prepareDisplayCapture(on: targetScreen)
+        let frozenImage = try await displayCapture.image()
         let displayImage = NSImage(
             cgImage: frozenImage,
             size: NSSize(width: targetScreen.frame.width, height: targetScreen.frame.height)
@@ -120,6 +131,60 @@ final class CaptureOrchestrator {
         lastCaptureURL = capturedURL
         try? FileManager.default.removeItem(at: tempURL)
 
+        await galleryApplyAndSave(capturedURL, recordID: record.id)
+    }
+
+    private func captureLongScreenshot(on screen: NSScreen?) async throws {
+        let delay = AppPreferences.selfTimerDelay
+        if delay != .off {
+            await CountdownOverlay.shared.showCountdown(seconds: delay.rawValue)
+        }
+
+        let targetScreen = screen
+            ?? NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }
+            ?? NSScreen.main
+        guard let targetScreen else { return }
+
+        let frontmostApplication = NSWorkspace.shared.frontmostApplication
+        MenuBarPopoverController.shared.closePopover()
+        try await Task.sleep(for: .milliseconds(200))
+
+        let displayCapture = try await ScreenCapture.shared.prepareDisplayCapture(on: targetScreen, excludingOwnApplication: true)
+        let frozenCGImage = try await displayCapture.image()
+        let frozenImage = NSImage(
+            cgImage: frozenCGImage,
+            size: NSSize(width: targetScreen.frame.width, height: targetScreen.frame.height)
+        )
+
+        let overlay = RegionSelectionOverlay()
+        guard let selection = await overlay.selectRegion(over: frozenImage, screens: [targetScreen]) else { return }
+
+        frontmostApplication?.activate(options: [])
+        try await Task.sleep(for: .milliseconds(200))
+        // Start from the live viewport after selection and application reactivation.
+        let initialFrame = try await displayCapture.image(viewport: selection.localRect)
+        let session = try LongScreenshotSession(
+            initialFrame: initialFrame,
+            viewport: selection.localRect,
+            screen: targetScreen,
+            displayCapture: displayCapture
+        )
+        guard let stitchedImage = await session.run(),
+              let tempURL = writePNGToTemp(stitchedImage) else { return }
+        await processCapturedURL(tempURL)
+    }
+
+    private func processCapturedURL(_ url: URL) async {
+        ScreenCapture.shared.playShutterSound()
+
+        guard let record = HistoryStore.shared.importCapture(from: url) else {
+            print("Capture failed: could not import capture")
+            try? FileManager.default.removeItem(at: url)
+            return
+        }
+        let capturedURL = HistoryStore.shared.urlForRecord(record)
+        lastCaptureURL = capturedURL
+        try? FileManager.default.removeItem(at: url)
         await galleryApplyAndSave(capturedURL, recordID: record.id)
     }
 
@@ -169,7 +234,7 @@ final class CaptureOrchestrator {
                 on: captureScreen
             )
         } catch {
-            print("OCR failed: \(error.localizedDescription)")
+            showCaptureError(error)
         }
     }
 

@@ -1,6 +1,7 @@
 import AppKit
 import Vision
 import CoreGraphics
+import ScreenCaptureKit
 
 @MainActor
 @Observable
@@ -14,6 +15,7 @@ final class ScreenCapture {
     // MARK: - Fullscreen 
 
     func captureFullscreen() async throws -> URL? {
+        try requireScreenRecordingPermission()
         guard !isCapturing else { return nil }
         isCapturing = true
         defer { isCapturing = false }
@@ -26,17 +28,79 @@ final class ScreenCapture {
         return URL(fileURLWithPath: tempPath)
     }
 
-    // MARK: - Display image and crop
+    // MARK: - Display image and viewport crop
 
-    func captureDisplayImage(on screen: NSScreen) -> CGImage? {
-        guard !isCapturing else { return nil }
-        isCapturing = true
-        defer { isCapturing = false }
+    enum CaptureError: LocalizedError {
+        case screenRecordingPermissionRequired
+        case displayUnavailable
+        case invalidViewport
 
-        guard let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
-            return nil
+        var errorDescription: String? {
+            switch self {
+            case .screenRecordingPermissionRequired:
+                return L10n.string("Allow BetterShot in Screen & System Audio Recording in System Settings, then quit and reopen BetterShot.")
+            case .displayUnavailable:
+                return L10n.string("The selected display is no longer available.")
+            case .invalidViewport:
+                return L10n.string("Could not capture the selected area.")
+            }
         }
-        return CGDisplayCreateImage(CGDirectDisplayID(displayID.uint32Value))
+    }
+
+    func requireScreenRecordingPermission() throws {
+        guard CGPreflightScreenCaptureAccess() else {
+            // A newly granted permission may require restarting this process.
+            // Never treat the desktop-only image available without permission as a capture.
+            _ = CGRequestScreenCaptureAccess()
+            throw CaptureError.screenRecordingPermissionRequired
+        }
+    }
+
+    /// Reuses a display filter throughout a scroll session and excludes capture controls.
+    func prepareDisplayCapture(on screen: NSScreen, excludingOwnApplication: Bool = false) async throws -> DisplayCapture {
+        try requireScreenRecordingPermission()
+        guard let displayNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+            throw CaptureError.displayUnavailable
+        }
+        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
+        guard let display = content.displays.first(where: { $0.displayID == displayNumber.uint32Value }) else {
+            throw CaptureError.displayUnavailable
+        }
+        let excludedApplications = excludingOwnApplication
+            ? content.applications.filter { $0.processID == ProcessInfo.processInfo.processIdentifier }
+            : []
+        let filter = SCContentFilter(display: display, excludingApplications: excludedApplications, exceptingWindows: [])
+        return DisplayCapture(filter: filter, pointSize: screen.frame.size, scale: CGFloat(filter.pointPixelScale))
+    }
+
+    @MainActor
+    struct DisplayCapture {
+        fileprivate let filter: SCContentFilter
+        fileprivate let pointSize: CGSize
+        fileprivate let scale: CGFloat
+
+        /// Viewports are screen-local AppKit points; ScreenCaptureKit uses a top-left origin.
+        func image(viewport: CGRect? = nil) async throws -> CGImage {
+            let viewport = viewport ?? CGRect(origin: .zero, size: pointSize)
+            let pixels = CGRect(
+                x: viewport.minX * scale,
+                y: (pointSize.height - viewport.maxY) * scale,
+                width: viewport.width * scale,
+                height: viewport.height * scale
+            ).integral.intersection(CGRect(x: 0, y: 0, width: pointSize.width * scale, height: pointSize.height * scale))
+            guard !pixels.isNull, pixels.width > 0, pixels.height > 0, scale > 0 else {
+                throw CaptureError.invalidViewport
+            }
+            let configuration = SCStreamConfiguration()
+            configuration.sourceRect = CGRect(
+                x: pixels.minX / scale, y: pixels.minY / scale,
+                width: pixels.width / scale, height: pixels.height / scale
+            )
+            configuration.width = Int(pixels.width)
+            configuration.height = Int(pixels.height)
+            configuration.showsCursor = false
+            return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+        }
     }
 
     /// Crops a screen-local viewport expressed in AppKit points (bottom-left origin).
@@ -58,6 +122,7 @@ final class ScreenCapture {
     // MARK: - Region
 
     func captureRegion() async throws -> URL? {
+        try requireScreenRecordingPermission()
         guard !isCapturing else { return nil }
         isCapturing = true
         defer { isCapturing = false }
@@ -71,6 +136,7 @@ final class ScreenCapture {
     // MARK: - Window (CLI screencapture -w)
 
     func captureWindow(includeShadow: Bool = false) async throws -> URL? {
+        try requireScreenRecordingPermission()
         guard !isCapturing else { return nil }
         isCapturing = true
         defer { isCapturing = false }

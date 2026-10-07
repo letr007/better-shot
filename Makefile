@@ -21,7 +21,7 @@ VERSION     := $(shell python3 -c "import json; print(json.load(open('version.js
 DMG_NAME     = BetterShot-$(VERSION).dmg
 DMG_DIR      = release
 
-.PHONY: build release run dmg clean lint test-build version ship help
+.PHONY: build release run dmg clean lint test-build test-stitcher version ship help
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -79,6 +79,12 @@ lint: ## Check for compiler warnings
 
 test-build: clean release ## Full clean + release build
 	@echo "==> Test build passed."
+
+test-stitcher: ## Verify scroll alignment and composited pixels
+	@mkdir -p $(DERIVED_DIR)/Validation
+	@xcrun swiftc -swift-version 6 -O Sources/Capture/LongScreenshotStitcher.swift \
+		Tests/LongScreenshotStitcherTests.swift -o $(DERIVED_DIR)/Validation/stitcher-tests
+	@$(DERIVED_DIR)/Validation/stitcher-tests
 
 ship: ## Signed release: build, sign, notarize, DMG (both architectures)
 	@bash scripts/release.sh

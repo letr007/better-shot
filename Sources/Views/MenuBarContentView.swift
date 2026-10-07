@@ -117,6 +117,10 @@ struct MenuBarContentView: View {
                 dismissAndRun(.window)
             }
 
+            TrayGridButton(title: L10n.string("Long Screenshot"), icon: "scroll", shortcut: "\u{2318}\u{21E7}6") {
+                dismissAndRun(.longScreenshot)
+            }
+
             TrayGridButton(title: L10n.string("Pick Color"), icon: "eyedropper") {
                 dismissAndRun(.colorPicker)
             }

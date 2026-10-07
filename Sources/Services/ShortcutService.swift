@@ -8,6 +8,7 @@ final class ShortcutService {
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    private weak var longScreenshotSession: LongScreenshotSession?
     private static let shortcutLock = NSLock()
     private static var _cachedShortcuts: [(Action, Shortcut)] = []
     private static var cachedShortcuts: [(Action, Shortcut)] {
@@ -29,6 +30,7 @@ final class ShortcutService {
         static let defaultRegion = Shortcut(keyCode: UInt32(kVK_ANSI_4), modifiers: UInt32(cmdKey | shiftKey), enabled: true)
         static let defaultFullscreen = Shortcut(keyCode: UInt32(kVK_ANSI_3), modifiers: UInt32(cmdKey | shiftKey), enabled: true)
         static let defaultWindow = Shortcut(keyCode: UInt32(kVK_ANSI_5), modifiers: UInt32(cmdKey | shiftKey), enabled: true)
+        static let defaultLongScreenshot = Shortcut(keyCode: UInt32(kVK_ANSI_6), modifiers: UInt32(cmdKey | shiftKey), enabled: true)
         static let defaultOCR = Shortcut(keyCode: UInt32(kVK_ANSI_O), modifiers: UInt32(cmdKey | shiftKey), enabled: true)
         static let defaultColorPicker = Shortcut(keyCode: UInt32(kVK_ANSI_C), modifiers: UInt32(cmdKey | shiftKey), enabled: true)
         static let defaultRecording = Shortcut(keyCode: UInt32(kVK_ANSI_2), modifiers: UInt32(cmdKey | shiftKey), enabled: true)
@@ -41,6 +43,7 @@ final class ShortcutService {
         case ocr = 4
         case colorPicker = 5
         case recording = 6
+        case longScreenshot = 7
     }
 
     // MARK: - Registration (CGEvent tap — intercepts system shortcuts)
@@ -83,6 +86,7 @@ final class ShortcutService {
             (.region, service.loadShortcut(for: .region) ?? .defaultRegion),
             (.fullscreen, service.loadShortcut(for: .fullscreen) ?? .defaultFullscreen),
             (.window, service.loadShortcut(for: .window) ?? .defaultWindow),
+            (.longScreenshot, service.loadShortcut(for: .longScreenshot) ?? .defaultLongScreenshot),
             (.ocr, service.loadShortcut(for: .ocr) ?? .defaultOCR),
             (.colorPicker, service.loadShortcut(for: .colorPicker) ?? .defaultColorPicker),
             (.recording, service.loadShortcut(for: .recording) ?? .defaultRecording),
@@ -98,6 +102,17 @@ final class ShortcutService {
         }
         eventTap = nil
         runLoopSource = nil
+    }
+
+    // MARK: - Long Screenshot Session
+
+    func beginLongScreenshotSession(_ session: LongScreenshotSession) {
+        longScreenshotSession = session
+    }
+
+    func endLongScreenshotSession(_ session: LongScreenshotSession) {
+        guard longScreenshotSession === session else { return }
+        longScreenshotSession = nil
     }
 
     // MARK: - Persistence
@@ -146,6 +161,17 @@ final class ShortcutService {
 
         let keyCode = UInt32(event.getIntegerValueField(.keyboardEventKeycode))
         let flags = event.flags
+
+        if let session = ShortcutService.shared.longScreenshotSession {
+            if keyCode == UInt32(kVK_Return) {
+                Task { @MainActor in session.finish() }
+                return nil
+            }
+            if keyCode == UInt32(kVK_Escape) {
+                Task { @MainActor in session.cancel() }
+                return nil
+            }
+        }
 
         var carbonMods: UInt32 = 0
         if flags.contains(.maskCommand) { carbonMods |= UInt32(cmdKey) }

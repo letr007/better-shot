@@ -630,6 +630,7 @@ struct CaptureSettingsTab: View {
                     ShortcutRow(label: "Region", action: .region)
                     ShortcutRow(label: "Fullscreen", action: .fullscreen)
                     ShortcutRow(label: "Window", action: .window)
+                    ShortcutRow(label: "Long Screenshot", action: .longScreenshot)
                     ShortcutRow(label: "OCR Region", action: .ocr)
                     ShortcutRow(label: "Color Picker", action: .colorPicker)
                     ShortcutRow(label: "Record Screen", action: .recording)
@@ -642,6 +643,7 @@ struct CaptureSettingsTab: View {
                         case .region: .defaultRegion
                         case .fullscreen: .defaultFullscreen
                         case .window: .defaultWindow
+                        case .longScreenshot: .defaultLongScreenshot
                         case .ocr: .defaultOCR
                         case .colorPicker: .defaultColorPicker
                         case .recording: .defaultRecording
@@ -666,6 +668,7 @@ struct CaptureSettingsTab: View {
                         case .region: .defaultRegion
                         case .fullscreen: .defaultFullscreen
                         case .window: .defaultWindow
+                        case .longScreenshot: .defaultLongScreenshot
                         case .ocr: .defaultOCR
                         case .colorPicker: .defaultColorPicker
                         case .recording: .defaultRecording
@@ -810,6 +813,7 @@ struct ShortcutRow: View {
         case .region: return .defaultRegion
         case .fullscreen: return .defaultFullscreen
         case .window: return .defaultWindow
+        case .longScreenshot: return .defaultLongScreenshot
         case .ocr: return .defaultOCR
         case .colorPicker: return .defaultColorPicker
         case .recording: return .defaultRecording
