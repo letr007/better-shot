@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 @MainActor
 final class ToastWindow {
@@ -6,59 +7,36 @@ final class ToastWindow {
 
     private var panel: NSPanel?
     private var dismissTask: Task<Void, Never>?
-    private var panelGeneration: UInt = 0
 
     private init() {}
 
-    func show(
-        title: String = L10n.string("Saved"),
-        message: String,
-        icon: NSImage? = nil,
-        systemIcon: String? = nil,
-        duration: TimeInterval = 2.5,
-        on preferredScreen: NSScreen? = nil
-    ) {
+    private var panelGeneration: UInt = 0
+
+    func show(isError: Bool = false, title: String = "Saved", message: String, icon: NSImage? = nil, systemIcon: String? = nil, duration: TimeInterval = 2.5, on preferredScreen: NSScreen? = nil) {
         dismiss(animated: false)
         panelGeneration &+= 1
 
         let toastView = ToastContentView(title: title, message: message, icon: icon, systemIcon: systemIcon)
-        let contentSize = toastView.fittingSize
-        toastView.frame = NSRect(origin: .zero, size: contentSize)
-        toastView.autoresizingMask = [.width, .height]
+        let hostingView = NSHostingView(rootView: toastView)
 
-        let containerView = NSView(frame: NSRect(origin: .zero, size: contentSize))
-        containerView.addSubview(toastView)
-
-        let panel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: contentSize),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = true
-        panel.level = .floating
-        panel.contentView = containerView
-        panel.isMovableByWindowBackground = false
-        panel.hidesOnDeactivate = false
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-
+        let panel = Self.makePanel(hostingView: hostingView)
+        panel.identifier = NSUserInterfaceItemIdentifier("BetterShot.Toast")
         guard let screen = preferredScreen ?? NSScreen.main ?? NSScreen.screens.first else { return }
-        let screenFrame = screen.visibleFrame
-        let panelSize = panel.frame.size
-        let x = screenFrame.midX - panelSize.width / 2
-        let y = screenFrame.maxY - panelSize.height - 12
-        panel.setFrameOrigin(NSPoint(x: x, y: y))
+        let origin = Self.origin(for: panel.frame.size, in: screen.visibleFrame)
+        let x = origin.x
+        let y = origin.y
+        let slide: CGFloat = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 10
+        panel.setFrameOrigin(NSPoint(x: x, y: y + slide))
 
         panel.alphaValue = 0
         panel.orderFrontRegardless()
         self.panel = panel
 
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.2
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.28
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().alphaValue = 1
+            panel.animator().setFrameOrigin(NSPoint(x: x, y: y))
         }
 
         dismissTask = Task {
@@ -66,6 +44,34 @@ final class ToastWindow {
             guard !Task.isCancelled else { return }
             dismiss(animated: true)
         }
+    }
+
+    /// Shared native presentation for informational and interactive transfer toasts.
+    static func makePanel<Content: View>(hostingView: NSHostingView<Content>) -> NSPanel {
+        // The panel owns its size. Bridging SwiftUI's min/ideal/max sizes back
+        // onto this window can recursively invalidate constraints on macOS 26.
+        let size = hostingView.fittingSize
+        hostingView.sizingOptions = []
+        hostingView.setFrameSize(size)
+        hostingView.autoresizingMask = [.width, .height]
+        let panel = ToastPanel(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.level = .floating
+        panel.contentView = hostingView
+        panel.isMovableByWindowBackground = false
+        panel.hidesOnDeactivate = false
+        panel.becomesKeyOnlyIfNeeded = true
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        return panel
+    }
+
+    static func origin(for size: CGSize, in visibleFrame: CGRect) -> CGPoint {
+        CGPoint(x: visibleFrame.midX - size.width / 2,
+                y: visibleFrame.maxY - size.height - 12)
     }
 
     func dismiss(animated: Bool) {
@@ -78,15 +84,15 @@ final class ToastWindow {
         }
 
         if animated {
-            let generation = panelGeneration
-            NSAnimationContext.runAnimationGroup({ context in
-                context.duration = 0.2
-                context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            let gen = panelGeneration
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.2
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
                 panel.animator().alphaValue = 0
             }, completionHandler: { [weak self] in
+                panel.orderOut(nil)
                 Task { @MainActor in
-                    panel.orderOut(nil)
-                    guard let self, self.panelGeneration == generation else { return }
+                    guard let self, self.panelGeneration == gen else { return }
                     self.panel = nil
                 }
             })
@@ -97,69 +103,44 @@ final class ToastWindow {
     }
 }
 
-private final class ToastContentView: NSVisualEffectView {
-    init(title: String, message: String, icon: NSImage?, systemIcon: String?) {
-        super.init(frame: .zero)
+private struct ToastContentView: View {
+    let title: String
+    let message: String
+    let icon: NSImage?
+    let systemIcon: String?
 
-        material = .hudWindow
-        blendingMode = .withinWindow
-        state = .active
-        wantsLayer = true
-        layer?.cornerRadius = 12
-        layer?.cornerCurve = .continuous
-        layer?.borderWidth = 0.5
-        layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.25).cgColor
-        layer?.masksToBounds = true
+    var body: some View {
+        HStack(spacing: 10) {
+            if let icon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 32, height: 32)
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            } else if let systemIcon {
+                Image(systemName: systemIcon)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 32, height: 32)
+            }
 
-        let titleLabel = NSTextField(labelWithString: title)
-        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        titleLabel.textColor = .labelColor
-        titleLabel.lineBreakMode = .byTruncatingTail
-        titleLabel.maximumNumberOfLines = 1
-
-        let messageLabel = NSTextField(wrappingLabelWithString: message)
-        messageLabel.font = .systemFont(ofSize: 11)
-        messageLabel.textColor = .secondaryLabelColor
-        messageLabel.preferredMaxLayoutWidth = 320
-        messageLabel.maximumNumberOfLines = 3
-
-        let textStack = NSStackView(views: [titleLabel, messageLabel])
-        textStack.orientation = .vertical
-        textStack.alignment = .leading
-        textStack.spacing = 1
-
-        var contentViews: [NSView] = []
-        if let image = icon ?? systemIcon.flatMap({ NSImage(systemSymbolName: $0, accessibilityDescription: title) }) {
-            let imageView = NSImageView(image: image)
-            imageView.imageScaling = .scaleProportionallyUpOrDown
-            imageView.contentTintColor = icon == nil ? .secondaryLabelColor : nil
-            imageView.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                imageView.widthAnchor.constraint(equalToConstant: 32),
-                imageView.heightAnchor.constraint(equalToConstant: 32),
-            ])
-            contentViews.append(imageView)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                Text(message)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
         }
-        contentViews.append(textStack)
-
-        let contentStack = NSStackView(views: contentViews)
-        contentStack.orientation = .horizontal
-        contentStack.alignment = .centerY
-        contentStack.spacing = 10
-        contentStack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(contentStack)
-
-        NSLayoutConstraint.activate([
-            contentStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-            contentStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
-            contentStack.topAnchor.constraint(equalTo: topAnchor, constant: 10),
-            contentStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
-            messageLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 320),
-        ])
+        .padding(.horizontal, 16)
+        .padding(.vertical, 11)
+        .glassSurface(cornerRadius: 14, depth: .raised)
+        .accessibilityElement(children: .combine)
     }
+}
 
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError()
-    }
+private final class ToastPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
 }

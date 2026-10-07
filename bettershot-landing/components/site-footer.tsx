@@ -1,0 +1,145 @@
+import Image from "next/image"
+import Link from "next/link"
+
+const columns = [
+  {
+    title: "Product",
+    links: [
+      { href: "/#download", label: "Download" },
+      { href: "/video-recording", label: "Video recording" },
+      { href: "/screenshots", label: "Screenshots" },
+      { href: "/#compare", label: "Compare" },
+      { href: "/#faq", label: "FAQ" },
+      { href: "/changelog", label: "Changelog" },
+    ],
+  },
+  {
+    title: "Learn",
+    links: [
+      { href: "/blog", label: "Blog" },
+      {
+        href: "/blog/cleanshot-x-capcut-loom-alternative",
+        label: "vs CleanShot X, CapCut, Loom",
+      },
+      {
+        href: "https://github.com/KartikLabhshetwar/better-shot",
+        label: "GitHub",
+        external: true,
+      },
+      {
+        href: "https://x.com/bettershotsite",
+        label: "X (Twitter)",
+        external: true,
+      },
+      { href: "/llms.txt", label: "llms.txt" },
+    ],
+  },
+  {
+    title: "Legal",
+    links: [
+      { href: "/privacy", label: "Privacy" },
+      { href: "/terms", label: "Terms" },
+      {
+        href: "https://github.com/KartikLabhshetwar/better-shot/blob/main/LICENSE",
+        label: "BSD 3 Clause license",
+        external: true,
+      },
+      {
+        href: "https://github.com/KartikLabhshetwar/better-shot/issues",
+        label: "Report an issue",
+        external: true,
+      },
+    ],
+  },
+]
+
+const linkClass = "text-[14px] text-zinc-500 outline-none transition-colors duration-150 hover:text-zinc-900"
+
+export function SiteFooter() {
+  return (
+    <footer className="border-t border-zinc-100">
+      <div className="mx-auto max-w-[1100px] px-6">
+        <div className="grid grid-cols-2 gap-10 py-14 md:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
+          <div className="col-span-2 md:col-span-1">
+            <div className="mb-4 flex items-center gap-2.5">
+              <Image src="/logo.png" alt="" width={24} height={24} className="rounded-md" />
+              <span className="text-[18px] font-semibold tracking-tight text-zinc-900">Better Shot</span>
+            </div>
+            <p className="max-w-[280px] text-[14px] leading-[24px] text-zinc-500">
+              The free, open source alternative to Loom and CleanShot X. Record, edit, and share polished videos from your Mac.
+            </p>
+            <p className="mt-8 text-[13px] leading-[22px] text-zinc-400">
+              &copy; {new Date().getFullYear()} Better Shot. BSD 3 Clause licensed. Built by{" "}
+              <a
+                href="https://x.com/code_kartik"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-zinc-500 underline underline-offset-2 outline-none transition-colors duration-150 hover:text-zinc-900"
+              >
+                Kartik Labhshetwar
+              </a>
+            </p>
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <a
+                href="https://usefulshelf.co/?utm_source=bettershot.site&utm_medium=referral&utm_campaign=badge&utm_content=light"
+                target="_blank"
+                rel="noopener"
+                className="inline-flex"
+              >
+                <img
+                  src="https://usefulshelf.co/badge/usefulshelf.svg"
+                  alt="Featured on UsefulShelf"
+                  width={248}
+                  height={66}
+                  className="h-10 w-auto"
+                />
+              </a>
+              <a
+                href="https://www.trymacapps.com"
+                target="_blank"
+                rel="noopener"
+                className="inline-flex"
+              >
+                <img
+                  src="https://www.trymacapps.com/badge.png"
+                  alt="Featured on TryMacApps"
+                  width={200}
+                  height={67}
+                  className="h-10 w-auto"
+                />
+              </a>
+            </div>
+          </div>
+
+          {columns.map((column) => (
+            <nav key={column.title} aria-label={column.title}>
+              <p className="mb-5 text-[13px] font-medium uppercase tracking-widest text-zinc-400">
+                {column.title}
+              </p>
+              <ul className="space-y-3">
+                {column.links.map((link) => (
+                  <li key={link.href}>
+                    {"external" in link && link.external ? (
+                      <a
+                        href={link.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={linkClass}
+                      >
+                        {link.label}
+                      </a>
+                    ) : (
+                      <Link href={link.href} className={linkClass}>
+                        {link.label}
+                      </Link>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          ))}
+        </div>
+      </div>
+    </footer>
+  )
+}

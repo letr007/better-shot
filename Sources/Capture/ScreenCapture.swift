@@ -14,8 +14,7 @@ final class ScreenCapture {
 
     // MARK: - Fullscreen 
 
-    func captureFullscreen() async throws -> URL? {
-        try requireScreenRecordingPermission()
+    func captureFullscreen(on screen: NSScreen? = nil) async throws -> URL? {
         guard !isCapturing else { return nil }
         isCapturing = true
         defer { isCapturing = false }
@@ -23,130 +22,168 @@ final class ScreenCapture {
         try? await Task.sleep(for: .milliseconds(200))
 
         let tempPath = makeTempPath()
-        let success = await runScreencapture(["-x", "-t", "png", tempPath])
+        var args = ["-x", "-t", "png"]
+        // Without -D, screencapture always grabs the main display, regardless
+        // of which one is actually active -- so on a multi-monitor setup a
+        // capture triggered with the mouse on a secondary screen would
+        // silently save the wrong display's content while the preview card
+        // still showed up on the right one. Resolve the same screen the
+        // caller already picked (or fall back to the same follow-mouse /
+        // pinned-display resolution the preview card uses) and target it
+        // explicitly.
+        let targetDisplayID = screen.flatMap(ActiveDisplayResolver.displayID(for:))
+            ?? ActiveDisplayResolver.screenForScreenshotCapture().flatMap(ActiveDisplayResolver.displayID(for:))
+        if let targetDisplayID, let index = ActiveDisplayResolver.screencaptureDisplayIndex(for: targetDisplayID) {
+            args.append(contentsOf: ["-D", String(index)])
+        } else {
+            // Falling through here means screencapture grabs the main
+            // display regardless of which one was actually active -- the
+            // exact silent-wrong-display bug this whole fix exists to
+            // prevent. Only expected to happen in a narrow race (e.g. the
+            // target display disconnected between resolution and the sleep
+            // above), but it should be diagnosable if it does.
+            print("BetterShot: could not resolve target display for -D; screencapture will fall back to the main display")
+        }
+        args.append(tempPath)
+
+        let success = try await runScreencapture(args, output: tempPath)
         guard success, FileManager.default.fileExists(atPath: tempPath) else { return nil }
         return URL(fileURLWithPath: tempPath)
-    }
-
-    // MARK: - Display image and viewport crop
-
-    enum CaptureError: LocalizedError {
-        case screenRecordingPermissionRequired
-        case displayUnavailable
-        case invalidViewport
-
-        var errorDescription: String? {
-            switch self {
-            case .screenRecordingPermissionRequired:
-                return L10n.string("Allow BetterShot in Screen & System Audio Recording in System Settings, then quit and reopen BetterShot.")
-            case .displayUnavailable:
-                return L10n.string("The selected display is no longer available.")
-            case .invalidViewport:
-                return L10n.string("Could not capture the selected area.")
-            }
-        }
-    }
-
-    func requireScreenRecordingPermission() throws {
-        guard CGPreflightScreenCaptureAccess() else {
-            // A newly granted permission may require restarting this process.
-            // Never treat the desktop-only image available without permission as a capture.
-            _ = CGRequestScreenCaptureAccess()
-            throw CaptureError.screenRecordingPermissionRequired
-        }
-    }
-
-    /// Reuses a display filter throughout a scroll session and excludes capture controls.
-    func prepareDisplayCapture(on screen: NSScreen, excludingOwnApplication: Bool = false) async throws -> DisplayCapture {
-        try requireScreenRecordingPermission()
-        guard let displayNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
-            throw CaptureError.displayUnavailable
-        }
-        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
-        guard let display = content.displays.first(where: { $0.displayID == displayNumber.uint32Value }) else {
-            throw CaptureError.displayUnavailable
-        }
-        let excludedApplications = excludingOwnApplication
-            ? content.applications.filter { $0.processID == ProcessInfo.processInfo.processIdentifier }
-            : []
-        let filter = SCContentFilter(display: display, excludingApplications: excludedApplications, exceptingWindows: [])
-        return DisplayCapture(filter: filter, pointSize: screen.frame.size, scale: CGFloat(filter.pointPixelScale))
-    }
-
-    @MainActor
-    struct DisplayCapture {
-        fileprivate let filter: SCContentFilter
-        fileprivate let pointSize: CGSize
-        fileprivate let scale: CGFloat
-
-        /// Viewports are screen-local AppKit points; ScreenCaptureKit uses a top-left origin.
-        func image(viewport: CGRect? = nil) async throws -> CGImage {
-            let viewport = viewport ?? CGRect(origin: .zero, size: pointSize)
-            let pixels = CGRect(
-                x: viewport.minX * scale,
-                y: (pointSize.height - viewport.maxY) * scale,
-                width: viewport.width * scale,
-                height: viewport.height * scale
-            ).integral.intersection(CGRect(x: 0, y: 0, width: pointSize.width * scale, height: pointSize.height * scale))
-            guard !pixels.isNull, pixels.width > 0, pixels.height > 0, scale > 0 else {
-                throw CaptureError.invalidViewport
-            }
-            let configuration = SCStreamConfiguration()
-            configuration.sourceRect = CGRect(
-                x: pixels.minX / scale, y: pixels.minY / scale,
-                width: pixels.width / scale, height: pixels.height / scale
-            )
-            configuration.width = Int(pixels.width)
-            configuration.height = Int(pixels.height)
-            configuration.showsCursor = false
-            return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
-        }
-    }
-
-    /// Crops a screen-local viewport expressed in AppKit points (bottom-left origin).
-    func crop(_ image: CGImage, to viewport: CGRect, on screen: NSScreen) -> CGImage? {
-        let scaleX = CGFloat(image.width) / screen.frame.width
-        let scaleY = CGFloat(image.height) / screen.frame.height
-        let rawRect = CGRect(
-            x: viewport.minX * scaleX,
-            y: (screen.frame.height - viewport.maxY) * scaleY,
-            width: viewport.width * scaleX,
-            height: viewport.height * scaleY
-        ).integral
-        let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
-        let cropRect = rawRect.intersection(bounds)
-        guard !cropRect.isNull, cropRect.width > 0, cropRect.height > 0 else { return nil }
-        return image.cropping(to: cropRect)
     }
 
     // MARK: - Region
 
+    /// Opens BetterShot's adjustable selector, including the capture-on-release setting.
     func captureRegion() async throws -> URL? {
-        try requireScreenRecordingPermission()
         guard !isCapturing else { return nil }
         isCapturing = true
         defer { isCapturing = false }
 
+        if AppPreferences.regionCaptureMode == .frozen {
+            return try await captureFrozenRegion()
+        }
+
+        switch await RegionSelectionOverlay().selectRegion() {
+        case .cancelled:
+            return nil
+        case .window:
+            return try await interactiveShot(window: true, includeShadow: false)
+        case .region(let selection):
+            return try await regionShot(selection.pointsRect)
+        }
+    }
+
+    /// Selection and cropping share the same snapshots; confirming never captures a later live frame.
+    private func captureFrozenRegion() async throws -> URL? {
+        guard CGPreflightScreenCaptureAccess() else {
+            _ = CGRequestScreenCaptureAccess()
+            throw FrozenCaptureError.permissionRequired
+        }
+        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        let excludedApps = PreviewWindowCaptureExclusion.includesAppWindowsInCaptures
+            ? [] : content.applications.filter { $0.processID == ProcessInfo.processInfo.processIdentifier }
+        let primaryHeight = CGDisplayBounds(CGMainDisplayID()).height
+        var frames: [CGDirectDisplayID: FrozenRegionFrame] = [:]
+        var backgrounds: [CGDirectDisplayID: NSImage] = [:]
+        for screen in NSScreen.screens {
+            guard let displayID = ActiveDisplayResolver.displayID(for: screen),
+                  let display = content.displays.first(where: { $0.displayID == displayID }) else {
+                throw FrozenCaptureError.displayUnavailable
+            }
+            let filter = SCContentFilter(display: display, excludingApplications: excludedApps, exceptingWindows: [])
+            let configuration = SCStreamConfiguration()
+            configuration.width = Int(screen.frame.width * CGFloat(filter.pointPixelScale))
+            configuration.height = Int(screen.frame.height * CGFloat(filter.pointPixelScale))
+            configuration.showsCursor = false
+            let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+            frames[displayID] = FrozenRegionFrame(
+                image: image,
+                displayRect: RegionGeometry.pointsRect(global: screen.frame, primaryHeight: primaryHeight)
+            )
+            backgrounds[displayID] = NSImage(cgImage: image, size: screen.frame.size)
+        }
+        guard !frames.isEmpty else { throw FrozenCaptureError.displayUnavailable }
+        switch await RegionSelectionOverlay().selectRegion(backgrounds: backgrounds) {
+        case .cancelled:
+            return nil
+        case .window:
+            return try await interactiveShot(window: true, includeShadow: false)
+        case .region(let selection):
+            guard let frame = frames[selection.displayID] else { throw FrozenCaptureError.displayUnavailable }
+            let image = try frame.crop(to: selection.pointsRect)
+            let url = URL(fileURLWithPath: makeTempPath())
+            guard let data = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else {
+                throw CocoaError(.fileWriteUnknown)
+            }
+            try data.write(to: url, options: .atomic)
+            return url
+        }
+    }
+
+    struct FrozenRegionFrame {
+        let image: CGImage
+        let displayRect: CGRect
+
+        func crop(to pointsRect: CGRect) throws -> CGImage {
+            guard let pixelRect = RegionGeometry.pixelRect(
+                pointsRect: pointsRect, displayRect: displayRect,
+                pixelSize: CGSize(width: image.width, height: image.height)
+            ), let cropped = image.cropping(to: pixelRect) else {
+                throw FrozenCaptureError.invalidRegion
+            }
+            return cropped
+        }
+    }
+
+    enum FrozenCaptureError: LocalizedError {
+        case permissionRequired, displayUnavailable, invalidRegion
+
+        var errorDescription: String? {
+            switch self {
+            case .permissionRequired:
+                return NSLocalizedString("Allow BetterShot in Screen & System Audio Recording in System Settings, then quit and reopen BetterShot.", comment: "Screen recording permission")
+            case .displayUnavailable:
+                return NSLocalizedString("The selected display is no longer available.", comment: "Frozen screenshot display unavailable")
+            case .invalidRegion:
+                return NSLocalizedString("Could not capture the selected area.", comment: "Invalid frozen screenshot region")
+            }
+        }
+    }
+
+    /// Captures the remembered rectangle straight away, no selection overlay.
+    func captureLastRegion() async throws -> URL? {
+        guard !isCapturing, let globalRect = AppPreferences.lastRegionRect else { return nil }
+        isCapturing = true
+        defer { isCapturing = false }
+        let pointsRect = RegionGeometry.pointsRect(global: globalRect, primaryHeight: CGDisplayBounds(CGMainDisplayID()).height)
+        return try await regionShot(pointsRect)
+    }
+
+    private func regionShot(_ pointsRect: CGRect) async throws -> URL? {
+        try? await Task.sleep(for: .milliseconds(80))
         let tempPath = makeTempPath()
-        let success = await runScreencapture(["-s", "-x", "-t", "png", tempPath])
+        let region = RegionGeometry.screencaptureArgument(pointsRect)
+        let success = try await runScreencapture(["-R", region, "-x", "-t", "png", tempPath], output: tempPath)
         guard success, FileManager.default.fileExists(atPath: tempPath) else { return nil }
         return URL(fileURLWithPath: tempPath)
     }
 
-    // MARK: - Window (CLI screencapture -w)
+    // MARK: - Window
 
     func captureWindow(includeShadow: Bool = false) async throws -> URL? {
-        try requireScreenRecordingPermission()
         guard !isCapturing else { return nil }
         isCapturing = true
         defer { isCapturing = false }
+        return try await interactiveShot(window: true, includeShadow: includeShadow)
+    }
 
+    private func interactiveShot(window: Bool, includeShadow: Bool) async throws -> URL? {
         let tempPath = makeTempPath()
-        var args = ["-w"]
-        if !includeShadow { args.append("-o") }
-        args.append(contentsOf: ["-x", "-t", "png", tempPath])
-
-        let success = await runScreencapture(args)
+        var arguments = ["-i", "-x", "-t", "png"]
+        if window { arguments.append("-w") }
+        if !includeShadow { arguments.append("-o") }
+        arguments.append(tempPath)
+        let success = try await runScreencapture(arguments, output: tempPath)
         guard success, FileManager.default.fileExists(atPath: tempPath) else { return nil }
         return URL(fileURLWithPath: tempPath)
     }
@@ -154,7 +191,10 @@ final class ScreenCapture {
     // MARK: - OCR Region
 
     func captureAndOCR() async throws -> String? {
-        guard let url = try await captureRegion() else { return nil }
+        guard !isCapturing else { return nil }
+        isCapturing = true
+        defer { isCapturing = false }
+        guard let url = try await interactiveShot(window: false, includeShadow: false) else { return nil }
         defer { try? FileManager.default.removeItem(at: url) }
 
         guard let image = NSImage(contentsOf: url),
@@ -167,19 +207,11 @@ final class ScreenCapture {
 
     private func recognizeContent(in image: CGImage) async throws -> String {
         return try await withCheckedThrowingContinuation { continuation in
-            let textRequest = VNRecognizeTextRequest()
-            textRequest.recognitionLevel = .accurate
-            textRequest.usesLanguageCorrection = true
-
-            let preferredLanguages = ["zh-Hans", "zh-Hant", "en-US"]
-            if let supportedLanguages = try? textRequest.supportedRecognitionLanguages() {
-                textRequest.recognitionLanguages = preferredLanguages.filter(supportedLanguages.contains)
-            }
-
             let barcodeRequest = VNDetectBarcodesRequest()
 
             let handler = VNImageRequestHandler(cgImage: image)
             do {
+                let textRequest = try Self.textRecognitionRequest()
                 try handler.perform([textRequest, barcodeRequest])
 
                 var parts: [String] = []
@@ -210,6 +242,15 @@ final class ScreenCapture {
         }
     }
 
+    static func textRecognitionRequest() throws -> VNRecognizeTextRequest {
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
+        let supported = try request.supportedRecognitionLanguages()
+        request.recognitionLanguages = ["zh-Hans", "zh-Hant", "en-US"].filter(supported.contains)
+        return request
+    }
+
     // MARK: - Sound
 
     func playShutterSound() {
@@ -224,25 +265,24 @@ final class ScreenCapture {
     // MARK: - Helpers
 
     private func makeTempPath() -> String {
-        let dir = NSTemporaryDirectory()
-        let stamp = Int(Date().timeIntervalSince1970 * 1000)
-        return "\(dir)bettershot_\(stamp).png"
+        ScreenshotFileNaming.scratchURL("Capture", extension: "png").path
     }
 
-    private func runScreencapture(_ arguments: [String]) async -> Bool {
-        await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-                process.arguments = arguments
-                do {
-                    try process.run()
-                    process.waitUntilExit()
-                    continuation.resume(returning: process.terminationStatus == 0)
-                } catch {
-                    continuation.resume(returning: false)
-                }
-            }
+    private func runScreencapture(_ arguments: [String], output: String) async throws -> Bool {
+        switch try await ScreencaptureRunner.run(arguments, output: output) {
+        case .saved: true
+        case let .exited(status, diagnostic): try Self.validateCommandResult(status: status, diagnostic: diagnostic)
         }
     }
+
+    /// Interactive cancellation has no diagnostic; actual failures must reach the user.
+    nonisolated static func validateCommandResult(status: Int32, diagnostic: String) throws -> Bool {
+        if status == 0 { return true }
+        let message = diagnostic.trimmingCharacters(in: .whitespacesAndNewlines)
+        if status == 1 && message.isEmpty { return false }
+        throw NSError(domain: "BetterShot.ScreenCapture", code: Int(status), userInfo: [
+            NSLocalizedDescriptionKey: "\(message.isEmpty ? "macOS could not create the screenshot." : message) Try again. If this continues, quit and reopen BetterShot and check Screen & System Audio Recording permission in System Settings."
+        ])
+    }
+
 }

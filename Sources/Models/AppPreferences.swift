@@ -10,13 +10,25 @@ enum AppPreferences {
     private static let playSoundKey = "bs_playSound"
     private static let overlayPositionKey = "bs_overlayPosition"
     private static let overlayDismissDelayKey = "bs_overlayDismissDelay"
+    private static let overlayCardSizeKey = "bs_overlayCardSize"
+    private static let overlayEdgeMarginKey = "bs_overlayEdgeMargin"
+    private static let overlayFollowsMouseKey = "bs_overlayFollowsMouse"
+    private static let overlayPinnedDisplayIDKey = "bs_overlayPinnedDisplayID"
     private static let exportFormatKey = "bs_exportFormat"
     private static let exportQualityKey = "bs_exportQuality"
     private static let selfTimerKey = "bs_selfTimerDelay"
-    private static let recordingFPSKey = "bs_recordingFPS"
-    private static let recordingShowCursorKey = "bs_recordingShowCursor"
-    private static let recordingCaptureAudioKey = "bs_recordingCaptureAudio"
-    private static let recordingOpenEditorKey = "bs_recordingOpenEditor"
+    static let recordingCaptureKeystrokesKey = "bs_recordingCaptureKeystrokes"
+    private static let openEditorAfterCaptureKey = "bs_openEditorAfterCapture"
+    private static let keepInDeckUntilSavedKey = "bs_keepInDeckUntilSaved"
+    private static let historyRetentionKey = "bs_historyRetentionLimit"
+    private static let recordingCaptureMicrophoneKey = "bs_recordingCaptureMicrophone"
+    private static let recordingStartDelaySecondsKey = "bs_recordingStartDelaySeconds"
+    private static let recordingShowCameraKey = "bs_recordingShowCamera"
+    private static let recordingCameraSizeKey = "bs_recordingCameraSize"
+    private static let recordingCameraDeviceIDKey = "bs_recordingCameraDeviceID"
+    private static let recordingMicrophoneDeviceIDKey = "bs_recordingMicrophoneDeviceID"
+    private static let lastRegionRectKey = "bs_lastRegionRect"
+    private static let captureRegionOnReleaseKey = "bs_captureRegionOnRelease"
     private static let regionCaptureModeKey = "bs_regionCaptureMode"
 
     // MARK: - Appearance
@@ -34,11 +46,31 @@ enum AppPreferences {
         NSApp.appearance = appearance.nsAppearance
     }
 
+    static let showCaptureBarAtLaunchKey = "bs_showCaptureBarAtLaunch"
+    static let showInDockKey = "bs_showInDock"
+    static let showInMenuBarKey = "bs_showInMenuBar"
+
+    static func visibility(defaults: UserDefaults = .standard) -> (dock: Bool, menuBar: Bool) {
+        let dock = defaults.bool(forKey: showInDockKey)
+        let menuBar = defaults.object(forKey: showInMenuBarKey) as? Bool ?? true
+        return (dock, menuBar || !dock)
+    }
+
     // MARK: - General
     static var saveDirectory: String {
-        get { UserDefaults.standard.string(forKey: saveDirKey) ?? NSHomeDirectory() + "/Desktop" }
+        get { UserDefaults.standard.string(forKey: saveDirKey) ?? defaultSaveDirectory }
         set { UserDefaults.standard.set(newValue, forKey: saveDirKey) }
     }
+
+    /// The Desktop, except under tests: a check that forgets to choose a folder
+    /// must never write into the real Desktop.
+    private static let defaultSaveDirectory: String = {
+        if ProcessInfo.processInfo.environment["BETTERSHOT_TESTING"] == "1" {
+            return FileManager.default.temporaryDirectory
+                .appendingPathComponent("BetterShotSaveTests-\(UUID().uuidString)", isDirectory: true).path
+        }
+        return NSHomeDirectory() + "/Desktop"
+    }()
 
     static var copyAfterSave: Bool {
         get { UserDefaults.standard.object(forKey: copyAfterSaveKey) as? Bool ?? true }
@@ -50,7 +82,35 @@ enum AppPreferences {
         set { UserDefaults.standard.set(newValue, forKey: playSoundKey) }
     }
 
+    /// Last region screenshot in global AppKit screen coordinates, redrawn as a ghost next time.
+    static var lastRegionRect: CGRect? {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: lastRegionRectKey) else { return nil }
+            let rect = NSRectFromString(raw)
+            return rect.isEmpty ? nil : rect
+        }
+        set { UserDefaults.standard.set(newValue.map(NSStringFromRect), forKey: lastRegionRectKey) }
+    }
+
     // MARK: - Overlay
+    static let overlayToolLayoutKey = "bs_overlayToolLayout"
+
+    static var overlayToolLayout: OverlayToolLayout {
+        get { OverlayToolLayout(data: UserDefaults.standard.data(forKey: overlayToolLayoutKey)) }
+        set { UserDefaults.standard.set(newValue.data, forKey: overlayToolLayoutKey) }
+    }
+
+    static let overlayAlwaysShowActionsKey = "bs_overlayAlwaysShowActions"
+
+    static func resetOverlaySettings() {
+        UserDefaults.standard.removeObject(forKey: overlayToolLayoutKey)
+        overlayPosition = .bottomRight
+        overlayDismissDelay = 5
+        overlayCardSize = .small
+        overlayEdgeMargin = overlayEdgeMarginDefault
+        UserDefaults.standard.removeObject(forKey: overlayAlwaysShowActionsKey)
+    }
+
     static var overlayPosition: OverlayPosition {
         get {
             guard let raw = UserDefaults.standard.string(forKey: overlayPositionKey),
@@ -60,12 +120,52 @@ enum AppPreferences {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: overlayPositionKey) }
     }
 
+    static let overlayDismissNever: Double = 16
+    static let overlayDismissRange: ClosedRange<Double> = 2...overlayDismissNever
+
+    /// The top of the slider means "leave it up", so anything at or above the sentinel never auto-hides.
+    static func overlayDismisses(after delay: Double) -> Bool { delay < overlayDismissNever }
+
     static var overlayDismissDelay: Double {
         get {
             let val = UserDefaults.standard.double(forKey: overlayDismissDelayKey)
             return val > 0 ? val : 5.0
         }
         set { UserDefaults.standard.set(newValue, forKey: overlayDismissDelayKey) }
+    }
+
+    static var overlayCardSize: OverlayCardSize {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: overlayCardSizeKey),
+                  let size = OverlayCardSize(rawValue: raw) else { return .small }
+            return size
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: overlayCardSizeKey) }
+    }
+
+    static let overlayEdgeMarginDefault: Double = 20
+    static let overlayEdgeMarginRange: ClosedRange<Double> = 0...48
+
+    static var overlayEdgeMargin: Double {
+        get { UserDefaults.standard.object(forKey: overlayEdgeMarginKey) as? Double ?? overlayEdgeMarginDefault }
+        set { UserDefaults.standard.set(newValue, forKey: overlayEdgeMarginKey) }
+    }
+
+    /// True (the default) shows the preview card on whichever display the
+    /// mouse is on. False pins it to `overlayPinnedDisplayID` instead.
+    static var overlayFollowsMouse: Bool {
+        get { UserDefaults.standard.object(forKey: overlayFollowsMouseKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: overlayFollowsMouseKey) }
+    }
+
+    /// The fixed display used when `overlayFollowsMouse` is false. 0 means
+    /// "none chosen yet" -- CGDirectDisplayID 0 is never a real display.
+    static var overlayPinnedDisplayID: CGDirectDisplayID? {
+        get {
+            let raw = UserDefaults.standard.integer(forKey: overlayPinnedDisplayIDKey)
+            return raw == 0 ? nil : CGDirectDisplayID(raw)
+        }
+        set { UserDefaults.standard.set(Int(newValue ?? 0), forKey: overlayPinnedDisplayIDKey) }
     }
 
     // MARK: - Export
@@ -96,30 +196,77 @@ enum AppPreferences {
     }
 
     // MARK: - Recording
-    static var recordingFPS: Int {
-        get {
-            let val = UserDefaults.standard.integer(forKey: recordingFPSKey)
-            return val > 0 ? val : 30
+    static var recordingCaptureKeystrokes: Bool {
+        get { UserDefaults.standard.object(forKey: recordingCaptureKeystrokesKey) as? Bool ?? false }
+        set { UserDefaults.standard.set(newValue, forKey: recordingCaptureKeystrokesKey) }
+    }
+
+    static var recordingCaptureMicrophone: Bool {
+        get { UserDefaults.standard.object(forKey: recordingCaptureMicrophoneKey) as? Bool ?? false }
+        set { UserDefaults.standard.set(newValue, forKey: recordingCaptureMicrophoneKey) }
+    }
+
+    static var recordingStartDelaySeconds: Int {
+        get { UserDefaults.standard.integer(forKey: recordingStartDelaySecondsKey) }
+        set { UserDefaults.standard.set(newValue, forKey: recordingStartDelaySecondsKey) }
+    }
+
+    static var recordingShowCamera: Bool {
+        get { UserDefaults.standard.object(forKey: recordingShowCameraKey) as? Bool ?? false }
+        set { UserDefaults.standard.set(newValue, forKey: recordingShowCameraKey) }
+    }
+
+    static var recordingCameraSize: Int {
+        get { UserDefaults.standard.object(forKey: recordingCameraSizeKey) as? Int ?? 200 }
+        set { UserDefaults.standard.set(newValue, forKey: recordingCameraSizeKey) }
+    }
+
+    static var recordingCameraDeviceID: String? {
+        get { UserDefaults.standard.string(forKey: recordingCameraDeviceIDKey) }
+        set { UserDefaults.standard.set(newValue, forKey: recordingCameraDeviceIDKey) }
+    }
+
+    static var recordingMicrophoneDeviceID: String? {
+        get { UserDefaults.standard.string(forKey: recordingMicrophoneDeviceIDKey) }
+        set { UserDefaults.standard.set(newValue, forKey: recordingMicrophoneDeviceIDKey) }
+    }
+
+    static let editorOpensFullScreenKey = "bs_editorOpensFullScreenOptIn"
+    static var editorOpensFullScreen: Bool {
+        UserDefaults.standard.bool(forKey: editorOpensFullScreenKey)
+    }
+
+    static let openEditorAfterRecordingKey = "bs_openEditorAfterRecording"
+    static func migrateEditorPreferences() {
+        if UserDefaults.standard.object(forKey: openEditorAfterRecordingKey) == nil {
+            UserDefaults.standard.set(openEditorAfterCapture, forKey: openEditorAfterRecordingKey)
         }
-        set { UserDefaults.standard.set(newValue, forKey: recordingFPSKey) }
     }
 
-    static var recordingShowCursor: Bool {
-        get { UserDefaults.standard.object(forKey: recordingShowCursorKey) as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: recordingShowCursorKey) }
+    static var openEditorAfterRecording: Bool {
+        UserDefaults.standard.object(forKey: openEditorAfterRecordingKey) as? Bool
+            ?? openEditorAfterCapture
     }
 
-    static var recordingCaptureAudio: Bool {
-        get { UserDefaults.standard.object(forKey: recordingCaptureAudioKey) as? Bool ?? false }
-        set { UserDefaults.standard.set(newValue, forKey: recordingCaptureAudioKey) }
+    // MARK: - Screenshot
+    static var openEditorAfterCapture: Bool {
+        get { UserDefaults.standard.object(forKey: openEditorAfterCaptureKey) as? Bool ?? false }
+        set { UserDefaults.standard.set(newValue, forKey: openEditorAfterCaptureKey) }
     }
 
-    static var recordingOpenEditor: Bool {
-        get { UserDefaults.standard.object(forKey: recordingOpenEditorKey) as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: recordingOpenEditorKey) }
+    static var keepInDeckUntilSaved: Bool {
+        get { UserDefaults.standard.bool(forKey: keepInDeckUntilSavedKey) }
+        set { UserDefaults.standard.set(newValue, forKey: keepInDeckUntilSavedKey) }
     }
 
-    // MARK: - Region Capture
+    /// Takes the shot the moment the mouse comes up, skipping the adjustable
+    /// rectangle. The pre-0.4.3 flow, kept for people who draw the region in one
+    /// stroke and never nudge it.
+    static var captureRegionOnRelease: Bool {
+        get { UserDefaults.standard.bool(forKey: captureRegionOnReleaseKey) }
+        set { UserDefaults.standard.set(newValue, forKey: captureRegionOnReleaseKey) }
+    }
+
     static var regionCaptureMode: RegionCaptureMode {
         get {
             guard let raw = UserDefaults.standard.string(forKey: regionCaptureModeKey),
@@ -127,6 +274,13 @@ enum AppPreferences {
             return mode
         }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: regionCaptureModeKey) }
+    }
+
+    // MARK: - History
+    /// How many captures history keeps. 0 means unlimited.
+    static var historyRetentionLimit: Int {
+        get { UserDefaults.standard.object(forKey: historyRetentionKey) as? Int ?? 100 }
+        set { UserDefaults.standard.set(newValue, forKey: historyRetentionKey) }
     }
 
     // MARK: - Default Beautifier Config
@@ -156,9 +310,9 @@ enum AppAppearance: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .system: return L10n.string("System")
-        case .light: return L10n.string("Light")
-        case .dark: return L10n.string("Dark")
+        case .system: return "System"
+        case .light: return "Light"
+        case .dark: return "Dark"
         }
     }
 
@@ -176,6 +330,49 @@ enum OverlayPosition: String, CaseIterable, Codable {
     case bottomLeft = "bottomLeft"
 }
 
+enum OverlayCardSize: String, CaseIterable, Identifiable {
+    case small, medium, large
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .small: return "Small"
+        case .medium: return "Medium"
+        case .large: return "Large"
+        }
+    }
+
+    /// Room for the card's `.shadow(radius: 14, y: 6)` to draw inside the panel bounds.
+    private static let shadowHeadroom: CGFloat = 24
+
+    func panelSize(margin: Double) -> CGSize {
+        CGSize(
+            width: thumbnailSize.width + margin + Self.shadowHeadroom,
+            height: thumbnailSize.height + margin + Self.shadowHeadroom
+        )
+    }
+
+    /// Hover control scale, deliberately sub-linear to the thumbnail ratio.
+    var controlScale: CGFloat {
+        switch self {
+        case .small: return 1.15
+        case .medium: return 1.35
+        case .large: return 1.6
+        }
+    }
+
+    /// The visible thumbnail drawn inside the panel.
+    var thumbnailSize: CGSize {
+        switch self {
+        case .small: return CGSize(width: 180, height: 130)
+        case .medium: return CGSize(width: 240, height: 172)
+        case .large: return CGSize(width: 300, height: 216)
+        }
+    }
+}
+
+/// Formats ImageIO can encode. macOS decodes WebP but cannot write it.
 enum ExportFormat: String, CaseIterable {
     case png, jpeg
 
@@ -192,18 +389,37 @@ enum ExportFormat: String, CaseIterable {
         case .jpeg: return "jpg"
         }
     }
+
+    var usesLossyQuality: Bool {
+        self != .png
+    }
+}
+
+enum HistoryRetention: Int, CaseIterable, Identifiable {
+    case fifty = 50
+    case hundred = 100
+    case twoFifty = 250
+    case fiveHundred = 500
+    case unlimited = 0
+
+    var id: Int { rawValue }
+
+    var label: String {
+        self == .unlimited ? "Unlimited" : "\(rawValue) captures"
+    }
 }
 
 enum RegionCaptureMode: String, CaseIterable, Identifiable {
     case frozen = "frozen"
+    // Keep the stored value for users who chose non-frozen selection.
     case system = "system"
 
     var id: String { rawValue }
 
     var label: String {
         switch self {
-        case .frozen: return L10n.string("Freeze & Select")
-        case .system: return L10n.string("System Select")
+        case .frozen: return NSLocalizedString("Freeze & Select", comment: "Frozen region screenshot mode")
+        case .system: return NSLocalizedString("Live Selection", comment: "Live region screenshot mode")
         }
     }
 }
@@ -216,7 +432,7 @@ enum SelfTimerDelay: Int, CaseIterable {
 
     var label: String {
         switch self {
-        case .off: return L10n.string("Off")
+        case .off: return "Off"
         default: return "\(rawValue)s"
         }
     }

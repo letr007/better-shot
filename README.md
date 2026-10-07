@@ -1,176 +1,226 @@
-# BetterShot
+<p align="center">
+  <img src="Resources/Assets.xcassets/AppIcon.appiconset/icon_128x128.png" width="96" height="96" alt="BetterShot clover icon">
+</p>
 
-[![macOS](https://img.shields.io/badge/macOS-14.0+-black.svg)](https://github.com/KartikLabhshetwar/better-shot)
-[![License](https://img.shields.io/badge/license-BSD%203--Clause-green.svg)](LICENSE)
-[![X (Twitter)](https://img.shields.io/badge/X-%231DA1F2.svg?style=flat&logo=X&logoColor=white)](https://x.com/code_kartik)
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-%23FFDD00.svg?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/code_kartik)
+<h1 align="center">BetterShot</h1>
 
-An open-source alternative to CleanShot X. Native Swift app for macOS — fast, lightweight, local-first. No subscriptions, no cloud, no telemetry.
+<p align="center">
+  <strong>Capture, edit, and share your screen. Native on macOS.</strong>
+</p>
 
-## What it does
+<p align="center">
+  <a href="https://github.com/KartikLabhshetwar/better-shot/releases/latest"><img src="https://img.shields.io/github/v/release/KartikLabhshetwar/better-shot?label=release" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/macOS-26.0+-black.svg" alt="macOS 26 or later">
+  <a href="https://github.com/KartikLabhshetwar/better-shot/actions/workflows/build.yml"><img src="https://github.com/KartikLabhshetwar/better-shot/actions/workflows/build.yml/badge.svg" alt="Build status"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-BSD%203--Clause-green.svg" alt="BSD 3-Clause license"></a>
+</p>
 
-### Capture
+<p align="center">
+  <a href="https://github.com/KartikLabhshetwar/better-shot/releases/latest">Download</a> ·
+  <a href="https://bettershot.site">Website</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
+  <a href="CONTRIBUTING.md">Contribute</a> ·
+  <a href="https://github.com/KartikLabhshetwar/better-shot/issues">Report a bug</a>
+</p>
 
-| Action | Shortcut |
-|---|---|
-| Region screenshot | `⌘⇧4` |
-| Fullscreen screenshot | `⌘⇧3` |
-| Window screenshot | `⌘⇧5` |
-| Record screen | `⌘⇧2` |
-| OCR text scan | `⌘⇧O` |
-| Color picker (hex) | `⌘⇧C` |
+BetterShot is a free, open-source Mac app for screenshots, scrolling captures,
+screen recordings, and image and video editing. No account, subscription, or
+cloud service required.
 
-Region, fullscreen, and window capture all use the native macOS `screencapture` CLI for maximum reliability. OCR extracts text from any region of the screen. Color picker samples any on-screen pixel and copies the hex value. All shortcuts are customizable in Settings > Capture.
-
-### Screen Recording
-
-- **Record full screen** — Capture your entire display as MP4 video with ScreenCaptureKit
-- **Floating status bar** — Timer, pause/resume, stop, restart, and discard controls (hidden from the recording itself)
-- **Video editor** — Trim, crop, add padding, corner radius, shadow, and background (solid, gradient, wallpaper, custom image). Export as MP4 with effects baked in
-- **Configurable** — FPS (24/30/60), show cursor, capture audio in Settings > Recording
-
-### Beautify
-
-- **Backgrounds** — 12 solid color presets, 16 gradient presets, bundled macOS wallpapers, or your own image
-- **Effects** — Padding, corner radius, shadow strength — all rendered live
-- **Crop** — Crop screenshots and recordings with draggable handles, dark mask, and rule-of-thirds grid
-- **Layout** — Aspect ratio (Auto, 1:1, 4:3, 3:2, 16:9, 9:16), 9-point alignment grid with smart corner radius
-- **Defaults** — Configure your preferred effects and background in Settings with a live preview
-- **Export** — PNG or JPEG for screenshots, MP4 for recordings
-
-### Annotate
-
-Rectangles, filled rectangles, ellipses, lines, curved arrows, freehand, text, numbered badges, blur, and spotlight. Each has a single-key shortcut in the editor (`R`, `F`, `O`, `L`, `A`, `D`, `T`, `N`, `B`, `G`). Text annotations support font selection, size, bold, italic, underline, and alignment.
-
-### Workflow
-
-- **Click-to-edit** — Click the floating preview to open the editor (image or video)
-- **Drag-to-app** — Drag from the preview panel directly into Figma, Slack, or any app
-- **Pin screenshots** — Pin any capture as an always-on-top floating window, unpin all from the menu bar
-- **Auto-apply** — Automatically apply your default background, padding, corner radius, and shadow on every capture and recording
-- **Self-timer** — Countdown overlay before capture (3s, 5s, 10s)
-- **Capture history** — Separate tabs for screenshots and recordings in Settings
-- **Recent menu** — Quick access to recent screenshots and recordings from the menu bar
-- **Toast notifications** — Confirmation toasts for OCR, color picker, and gallery saves
-- **In-app updates** — Check, download, and install updates without leaving the app
-- **Configurable overlay** — Choose preview position and auto-dismiss timing
+![BetterShot image editor with editable annotations and background controls](bettershot-landing/public/features/screenshot-editor-dark.webp)
 
 ## Install
 
-### Homebrew
+Requires macOS 26 or later.
 
 ```bash
 brew install --cask bettershot
 ```
 
-### Download
+Or download the Apple silicon or Intel `.dmg` from
+[Releases](https://github.com/KartikLabhshetwar/better-shot/releases/latest),
+drag BetterShot into Applications, and open it. A short tour walks you through
+permissions and your first capture.
 
-1. Go to [Releases](https://github.com/KartikLabhshetwar/better-shot/releases)
-2. Download the latest `.dmg` for your architecture (Apple Silicon or Intel)
-3. Open the DMG, drag BetterShot to Applications
-4. Launch and grant permissions when prompted
+## Features
 
-### Build from source
+**Screenshots**
+- Region, window, fullscreen, and [scrolling](#scrolling-capture) capture.
+- Extract text with OCR or pick any on-screen color as hex.
+- Annotate with arrows, shapes, text, numbered markers, highlights, blur, and pixelate.
+- Crop, rotate, and flip without losing editable annotations.
+- Frame captures on a wallpaper, soft gradient, or any custom color with padding, rounded corners, and shadow.
+- Save as PNG or JPEG.
 
-```bash
-git clone https://github.com/KartikLabhshetwar/better-shot.git
-cd better-shot
-make run
-```
+**Recordings**
+- Record a display, window, or adjustable area with optional system audio, microphone, camera, and teleprompter.
+- Pause, restart, or discard from the compact recording bar. Restart and Discard ask for confirmation in a native macOS dialog; Cancel keeps the recording.
 
-This builds a debug version and launches it. See [all make commands](#make-commands) below.
+**Video editor**
+- Cut clips, change speed from 0.25x to 8x, and add zooms, transitions, captions, and blur or pixelate masks.
+- Arrange screen and camera as Camera Bubble, Overlap, Side-by-Side, Presenter, Camera Only, or Screen Only.
+- Restyle the cursor (Recorded, Arrow, Dark, Light, Dot) with size, smoothing, click effects, and idle hiding.
+- Add 3D shots: eight camera moves, five drifting angles, Auto Scene, depth blur, and keyframed Bézier curves.
+- Export MP4 or MOV at 30 or 60 fps.
+
+**Everything else**
+- Copy, save, pin, edit, share, or drag captures from the floating preview.
+- Browse screenshots, recordings, and share links in the Media Gallery.
+- Share to [your own Cloudflare R2 bucket](#cloud-sharing) with one click.
+- Trigger any capture from Shortcuts, Raycast, or the terminal with [URL actions](#automation).
+
+Original captures and source movies are never modified. Both editors support
+undo, redo, and native full screen.
+
+<details>
+<summary>See the video editor</summary>
+
+![BetterShot video editor with zoom controls, a clip timeline, and cut markers](bettershot-landing/public/features/video-editor-dark.webp)
+
+</details>
+
+## Getting started
+
+1. Open BetterShot and allow Screen Recording. Enable Accessibility for global shortcuts.
+2. Press `⌘⇧4` to capture a region, or `⌘⇧2` to open the capture and recording bar.
+   Your last area opens already selected: press Return to capture it again, drag
+   its edges to resize it, or drag anywhere to draw a new one.
+3. Use the floating preview to Copy, Save, Pin, Edit, or Share.
+
+| Action | Shortcut |
+| --- | --- |
+| Region screenshot | `⌘⇧4` |
+| Capture previous region again | `⌘⇧1` |
+| Fullscreen screenshot | `⌘⇧3` |
+| Capture and recording bar | `⌘⇧2` |
+| Recording options | `⌘⇧5` |
+| OCR text scan | `⌘⇧O` |
+| Color picker | `⌘⇧C` |
+
+Change or add bindings in **Settings > Shortcuts**. Extra actions, such as
+Capture Region & Pin or Edit Clipboard Image, start unassigned.
+
+Set the background, padding, corner radius, and shadow for new captures in
+**Settings > General > Default Look**.
+
+Region screenshots use BetterShot’s adjustable selector. In
+**Settings > Capture > Region**, **Freeze & Select** captures the displays before
+selection and saves the selected pixels from that frozen image. **Live Selection**
+keeps the displays live and captures after confirmation. Both modes remember the
+last area and support adjustment. Enable **Capture as soon as I let go** to confirm
+on mouse release. Window screenshots and OCR use the native macOS selectors.
+OCR recognizes Simplified Chinese, Traditional Chinese, and English. The menu
+and Settings follow the system language, including Simplified Chinese.
+
+Saved previews dismiss after **Settings > Overlay > Hide After**, pausing while
+you use the card. **Keep screenshot previews open** holds only unsaved captures;
+choose **Never** under Hide After to keep saved previews open too.
+
+### Scrolling capture
+
+Capture a page or list taller than the screen:
+
+1. Choose **Scrolling Capture** in the menu bar, **Scroll** in the capture bar
+   (`⌘⇧2`), or assign a shortcut in **Settings > Shortcuts**.
+2. Drag over the scrollable content, then scroll down through it. Or click
+   **Auto Scroll** to let BetterShot scroll for you (requires Accessibility).
+3. Click **Stop** to send the stitched image to the capture preview. **×** or
+   Escape discards it.
+
+Fixed headers and scrollbars are left out of the joins, and content that fades
+in while scrolling is captured fully drawn. Captures finish at 30,000 pixels.
+If a join is missed, scroll back up a little and continue.
+
+### Where files go
+
+| Action | Result |
+| --- | --- |
+| **Copy** | Puts the image on the clipboard. No extra file is exported. |
+| **Save** | Writes to your configured folder. Later saves from the editor update the same file. |
+| **Export** | Asks for a new destination. |
+
+New installs also save every normal screenshot to the configured folder
+(Desktop by default). Turn this off under **Settings > General > Saving** to
+keep captures private until you choose Save or Export. Upgrades keep your
+previous behavior. Capture & Copy, Edit, and Pin shortcuts always skip
+automatic saving, and a failed save keeps the capture available for retry.
+
+Each capture is named once, when it is taken, and every action reuses that
+name. Customize it in **Settings > General > Saving** with templates such as
+`standup-{date}-{counter:3}`.
 
 ### Permissions
 
-BetterShot needs two macOS permissions on first launch:
+| Permission | Used for |
+| --- | --- |
+| Screen & System Audio Recording | Screenshots, recordings, and system audio |
+| Accessibility | Global shortcuts |
+| Input Monitoring | Cursor effects and shortcut overlays. Plain typing is never recorded. |
+| Microphone | Voice in recordings |
+| Camera | Camera recording |
 
-1. **Screen Recording** — System Settings > Privacy & Security > Screen Recording
-2. **Accessibility** — System Settings > Privacy & Security > Accessibility
+Manage access in **System Settings > Privacy & Security**. If capture or
+shortcuts still fail after granting access, quit and reopen BetterShot.
 
-Screen Recording lets the app capture your screen. Accessibility lets it override the default macOS screenshot shortcuts with its own.
+## Cloud sharing
 
-## Usage
+Sharing is optional and uses a Cloudflare R2 bucket you own.
 
-1. Launch BetterShot — it appears in your **menu bar** (top right of screen)
-2. Use a keyboard shortcut or click a capture action from the menu
-3. The floating preview appears — **click it to open the editor**
-4. Adjust background, effects, and add annotations
-5. `⌘S` to save, `⇧⌘C` to copy to clipboard
+1. Create an R2 bucket with a public URL and an
+   [API token](https://developers.cloudflare.com/r2/api/tokens/) with
+   Object Read & Write access to that bucket.
+2. Enter your credentials in **Settings > Sharing** and click **Test Connection**.
+   A successful test turns on **Upload when I share**; while it is off, Share
+   uploads nothing.
+3. Click **Share** on any capture to upload it and copy the link.
 
-### Editor shortcuts
+Credentials are stored in your login Keychain. Links open a viewer on
+`bettershot.site` by default. Turn on **Copy direct file links** to get the raw
+file URL instead. Anyone with a link can view it. Outside of sharing, BetterShot
+only goes online to check GitHub for updates.
 
-| Action | Key |
-|---|---|
-| Select tool | `V` |
-| Rectangle | `R` |
-| Filled rectangle | `F` |
-| Ellipse | `O` |
-| Line | `L` |
-| Arrow | `A` |
-| Freehand | `D` |
-| Text | `T` |
-| Numbered circle | `N` |
-| Blur | `B` |
-| Spotlight | `G` |
-| Save / Export | `⌘S` |
-| Copy to clipboard | `⇧⌘C` |
-| Undo / Redo | `⌘Z` / `⇧⌘Z` |
-| Delete annotation | `Delete` |
-| Select all | `⌘A` |
-| Close editor | `Esc` |
+## Automation
 
-### Settings
+Trigger captures from Shortcuts, Raycast, Alfred, or the terminal:
 
-Open from the menu bar > **Settings** (or `⌘,`).
+```bash
+open 'bettershot://capture/region'
+```
 
-- **General** — Save location, clipboard behavior, appearance, default effects with live preview (padding, radius, shadow, background including macOS wallpapers and custom images), export format
-- **Capture** — Self-timer delay, keyboard shortcuts (click any shortcut to re-record it, including record screen), overlay position and dismiss timing
-- **Recording** — FPS (24/30/60), show cursor, capture audio, open editor after recording
-- **History** — Browse and delete past screenshots
-- **Videos** — Browse and delete past recordings, open in video editor
-- **About** — Version info, in-app update checker, project links (GitHub, X)
+| Route | Action |
+| --- | --- |
+| `capture/region` | Region screenshot |
+| `capture/fullscreen` | Fullscreen screenshot |
+| `capture/window` | Window screenshot |
+| `capture/scroll` | Scrolling capture |
+| `ocr` | OCR text scan |
+| `color-picker` | Color picker |
+| `record` | Start a recording |
+| `settings` | Open Settings |
 
-## Make commands
+## Build from source
 
-| Command | What it does |
-|---|---|
-| `make build` | Debug build |
-| `make release` | Release build (unsigned) |
-| `make run` | Build and launch |
-| `make dmg` | Create DMG for local testing |
-| `make clean` | Remove build artifacts |
-| `make lint` | Check for compiler warnings |
-| `make test-build` | Full clean + release build |
-| `make version` | Print current version |
+Requires Xcode 26 and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
 
-## Architecture
+```bash
+brew install xcodegen
+git clone https://github.com/KartikLabhshetwar/better-shot.git
+cd better-shot
+make release
+open .build/Build/Products/Release/BetterShot.app
+```
 
-Native Swift 6 / SwiftUI. No Electron, no web views, no external dependencies.
-
-| Framework | Used for |
-|---|---|
-| CoreGraphics | Image compositing, annotation rendering, beautifier pipeline |
-| CoreImage | Gaussian blur for redaction |
-| Vision | OCR text extraction |
-| ScreenCaptureKit | Screen and window recording |
-| AVFoundation | Video editing, trimming, effect compositing via AVMutableVideoComposition |
-| AppKit | Color sampling, floating panels, pinned windows, capture via CLI |
-| Carbon | Global keyboard shortcuts via CGEvent tap |
+`make release` builds unsigned, so no signing identity is needed. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for Xcode setup, the code map, and tests.
 
 ## Contributing
 
-Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, project structure, and coding guidelines.
+Bug reports, fixes, docs, and accessibility feedback are all welcome. When
+[opening an issue](https://github.com/KartikLabhshetwar/better-shot/issues),
+include your macOS and BetterShot versions and steps to reproduce. Read the
+[contributor guide](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md)
+before opening a pull request.
 
-## License
-
-BSD 3-Clause. See [LICENSE](LICENSE).
-
-## Star History
-
-<a href="https://www.star-history.com/#KartikLabhshetwar/better-shot&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=KartikLabhshetwar/better-shot&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=KartikLabhshetwar/better-shot&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=KartikLabhshetwar/better-shot&type=date&legend=top-left" />
- </picture>
-</a>
+Built by [Kartik Labhshetwar](https://x.com/code_kartik) and
+[contributors](https://github.com/KartikLabhshetwar/better-shot/graphs/contributors).
+If BetterShot helps you, consider [supporting its development](https://www.buymeacoffee.com/code_kartik).

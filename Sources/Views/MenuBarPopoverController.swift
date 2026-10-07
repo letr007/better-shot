@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 final class MenuBarPopoverController: NSObject {
@@ -9,6 +10,7 @@ final class MenuBarPopoverController: NSObject {
     private var panel: NSPanel?
     private(set) var isOpen = false
     private var eventMonitor: Any?
+    private var localEventMonitor: Any?
 
     var originScreen: NSScreen? {
         statusItem?.button?.window?.screen
@@ -17,16 +19,29 @@ final class MenuBarPopoverController: NSObject {
     private override init() { super.init() }
 
     func setup() {
+        guard statusItem == nil else { return }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = item.button {
             button.image = NSImage(named: "MenuBarIcon")
             button.image?.isTemplate = true
+            button.setAccessibilityLabel("BetterShot")
             button.action = #selector(togglePopover(_:))
             button.target = self
         }
 
+        if let window = item.button?.window {
+            window.registerForDraggedTypes([.fileURL])
+            window.delegate = self
+        }
+
         statusItem = item
+    }
+
+    func setVisible(_ visible: Bool) {
+        if visible { setup() }
+        else { closePopover() }
+        statusItem?.isVisible = visible
     }
 
     @objc private func togglePopover(_ sender: NSStatusBarButton) {
@@ -37,7 +52,8 @@ final class MenuBarPopoverController: NSObject {
         }
     }
 
-    private func openPopover() {
+    func openPopover() {
+        guard !isOpen else { return }
         guard let button = statusItem?.button,
               let buttonWindow = button.window else { return }
 
@@ -76,14 +92,11 @@ final class MenuBarPopoverController: NSObject {
         let closingPanel = panel
         self.panel = nil
 
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.12
-            ctx.allowsImplicitAnimation = true
-            closingPanel.animator().alphaValue = 0
-        }, completionHandler: {
-            closingPanel.orderOut(nil)
+        // A capture or another window can open as soon as this returns.
+        closingPanel.orderOut(nil)
+        DispatchQueue.main.async {
             closingPanel.contentView = nil
-        })
+        }
     }
 
     private func createPanel() {
@@ -102,6 +115,7 @@ final class MenuBarPopoverController: NSObject {
             defer: false
         )
         panel.isOpaque = false
+        panel.identifier = NSUserInterfaceItemIdentifier("BetterShot.MenuBar")
         panel.backgroundColor = .clear
         panel.hasShadow = false
         panel.level = .statusBar
@@ -114,7 +128,21 @@ final class MenuBarPopoverController: NSObject {
     }
 
     private func startEventMonitor() {
-        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+        let clicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: clicks.union(.keyDown)) { [weak self] event in
+            guard let self, self.isOpen else { return event }
+            if event.type == .keyDown {
+                guard event.keyCode == 53 else { return event }
+                self.closePopover()
+                return nil
+            }
+            // Keep clicks in the tray and its status button; pass editor clicks through.
+            if event.window !== self.panel && event.window !== self.statusItem?.button?.window {
+                self.closePopover()
+            }
+            return event
+        }
+        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: clicks) { [weak self] _ in
             DispatchQueue.main.async {
                 self?.closePopover()
             }
@@ -122,9 +150,75 @@ final class MenuBarPopoverController: NSObject {
     }
 
     private func stopEventMonitor() {
+        if let monitor = localEventMonitor {
+            NSEvent.removeMonitor(monitor)
+            localEventMonitor = nil
+        }
         if let monitor = eventMonitor {
             NSEvent.removeMonitor(monitor)
             eventMonitor = nil
         }
+    }
+}
+
+extension MenuBarPopoverController: NSWindowDelegate, NSDraggingDestination {
+    func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard !droppedImageURLs(from: sender).isEmpty else { return [] }
+        showDropTargetHint()
+        return .copy
+    }
+
+    func draggingExited(_ sender: NSDraggingInfo?) {
+        clearDropTargetHint()
+    }
+
+    func draggingEnded(_ sender: NSDraggingInfo) {
+        clearDropTargetHint()
+    }
+
+    func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        clearDropTargetHint()
+        let urls = droppedImageURLs(from: sender)
+        guard !urls.isEmpty else { return false }
+        for url in urls {
+            PreviewPanelPresenter.shared.onAnnotate?(url)
+        }
+        return true
+    }
+
+    private func showDropTargetHint() {
+        guard let button = statusItem?.button else { return }
+        button.isHighlighted = true
+        let hint = NSImage(systemSymbolName: "square.and.pencil", accessibilityDescription: "Drop image to edit")
+        hint?.isTemplate = true
+        setIcon(hint, on: button, duration: 0.18)
+    }
+
+    private func clearDropTargetHint() {
+        guard let button = statusItem?.button else { return }
+        button.isHighlighted = false
+        let icon = NSImage(named: "MenuBarIcon")
+        icon?.isTemplate = true
+        setIcon(icon, on: button, duration: 0.12)
+    }
+
+    private func setIcon(_ image: NSImage?, on button: NSStatusBarButton, duration: CFTimeInterval) {
+        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            button.wantsLayer = true
+            let fade = CATransition()
+            fade.type = .fade
+            fade.duration = duration
+            fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            button.layer?.add(fade, forKey: "iconFade")
+        }
+        button.image = image
+    }
+
+    private func droppedImageURLs(from sender: NSDraggingInfo) -> [URL] {
+        let options: [NSPasteboard.ReadingOptionKey: Any] = [
+            .urlReadingFileURLsOnly: true,
+            .urlReadingContentsConformToTypes: [UTType.image.identifier]
+        ]
+        return sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: options) as? [URL] ?? []
     }
 }

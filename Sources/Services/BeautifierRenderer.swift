@@ -3,7 +3,12 @@ import AppKit
 
 enum BeautifierRenderer {
 
-    static func render(image: CGImage, config: BeautifierConfig, annotations: [AnnotationItem] = []) -> CGImage? {
+    static let sRGB = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+
+    static func render(image source: CGImage, config: BeautifierConfig) -> CGImage? {
+        let image = config.grade.applied(to: source)
+        // No background keeps the source frame, matching the image editor.
+        guard config.style != .none else { return image }
         let imgW = CGFloat(image.width)
         let imgH = CGFloat(image.height)
         let shortEdge = min(imgW, imgH)
@@ -22,21 +27,23 @@ enum BeautifierRenderer {
             }
         }
 
+        canvasW = ceil(canvasW)
+        canvasH = ceil(canvasH)
         let totalHPad = canvasW - imgW
         let totalVPad = canvasH - imgH
-        let imgX = config.alignment.xFactor * totalHPad
-        let imgY = (1 - config.alignment.yFactor) * totalVPad
+        let imgX = (config.alignment.xFactor * totalHPad).rounded()
+        let imgY = ((1 - config.alignment.yFactor) * totalVPad).rounded()
 
         let baseRadius = config.cornerRadius * shortEdge
         let m = config.alignment.cornerMultipliers
-        let radii = PerCornerRadii(
+        let radii = BeautifierCornerRadii(
             topLeft: baseRadius * m.tl,
             topRight: baseRadius * m.tr,
             bottomRight: baseRadius * m.br,
             bottomLeft: baseRadius * m.bl
         )
 
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let canvasColorSpace = source.colorSpace.flatMap { $0.model == .rgb ? $0 : nil } ?? sRGB
 
         guard let ctx = CGContext(
             data: nil,
@@ -44,13 +51,13 @@ enum BeautifierRenderer {
             height: Int(canvasH),
             bitsPerComponent: 8,
             bytesPerRow: 0,
-            space: colorSpace,
+            space: canvasColorSpace,
             bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
         ) else { return nil }
 
         let canvasRect = CGRect(x: 0, y: 0, width: canvasW, height: canvasH)
 
-        drawBackground(in: ctx, rect: canvasRect, style: config.style, colorSpace: colorSpace)
+        drawBackground(in: ctx, rect: canvasRect, style: config.style, colorSpace: sRGB)
 
         let imageRect = CGRect(x: imgX, y: imgY, width: imgW, height: imgH)
         if config.shadowStrength > 0 {
@@ -61,29 +68,9 @@ enum BeautifierRenderer {
         let clipPath = radii.path(in: imageRect)
         ctx.addPath(clipPath)
         ctx.clip()
+        ctx.interpolationQuality = .none
         ctx.draw(image, in: imageRect)
         ctx.restoreGState()
-
-        if !annotations.isEmpty {
-            ctx.saveGState()
-            let ctxH = CGFloat(Int(canvasH))
-            ctx.translateBy(x: 0, y: ctxH)
-            ctx.scaleBy(x: 1, y: -1)
-
-            let flippedImgY = config.alignment.yFactor * totalVPad
-            let flippedImageRect = CGRect(x: imgX, y: flippedImgY, width: imgW, height: imgH)
-            let flippedCanvasRect = CGRect(x: 0, y: 0, width: canvasW, height: canvasH)
-
-            AnnotationDrawing.draw(
-                annotations,
-                in: ctx,
-                imageRect: flippedImageRect,
-                fullCanvasRect: flippedCanvasRect,
-                sourceImage: image,
-                flipped: true
-            )
-            ctx.restoreGState()
-        }
 
         return ctx.makeImage()
     }
@@ -105,20 +92,7 @@ enum BeautifierRenderer {
             ctx.fill(rect)
 
         case .gradient(let preset):
-            guard let gradient = preset.cgGradient(in: colorSpace) else { return }
-            let start = CGPoint(
-                x: rect.origin.x + preset.startPoint.x * rect.width,
-                y: rect.origin.y + (1 - preset.startPoint.y) * rect.height
-            )
-            let end = CGPoint(
-                x: rect.origin.x + preset.endPoint.x * rect.width,
-                y: rect.origin.y + (1 - preset.endPoint.y) * rect.height
-            )
-            ctx.drawLinearGradient(
-                gradient,
-                start: start, end: end,
-                options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
-            )
+            preset.draw(in: ctx, rect: rect)
 
         case .wallpaper(let source):
             guard let wallpaperImage = loadImage(at: source.path) else { return }
@@ -137,7 +111,7 @@ enum BeautifierRenderer {
     private static func drawShadow(
         in ctx: CGContext,
         rect: CGRect,
-        radii: PerCornerRadii,
+        radii: BeautifierCornerRadii,
         strength: CGFloat,
         shortEdge: CGFloat
     ) {
@@ -176,7 +150,7 @@ enum BeautifierRenderer {
 
 // MARK: - Per-Corner Radii
 
-struct PerCornerRadii {
+struct BeautifierCornerRadii {
     let topLeft: CGFloat
     let topRight: CGFloat
     let bottomRight: CGFloat

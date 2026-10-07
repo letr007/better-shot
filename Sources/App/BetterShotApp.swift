@@ -1,22 +1,77 @@
 import SwiftUI
 
-enum L10n {
-    static func string(_ key: String) -> String {
-        Bundle.main.localizedString(forKey: key, value: key, table: "Localizable")
-    }
-
-    static func format(_ key: String, _ arguments: CVarArg...) -> String {
-        String(format: string(key), locale: .current, arguments: arguments)
-    }
-}
-
 @main
 struct BetterShotApp: App {
     @NSApplicationDelegateAdaptor(BetterShotDelegate.self) var delegate
+    @Environment(\.openWindow) var openWindow
+
+    init() {
+        if ProcessInfo.processInfo.environment["BETTERSHOT_TESTING"] != "1" {
+            let isNewInstall = OnboardingState.prepareForLaunch()
+            AfterCaptureActions.prepareForLaunch(isNewInstall: isNewInstall)
+            ReleaseNotes.prepareForLaunch(current: ReleaseNotesWindowController.currentVersion)
+        }
+    }
 
     var body: some Scene {
+        let _ = configureEditorPresentation()
+
         Settings {
             PreferencesView()
+        }
+        .defaultLaunchBehavior(.suppressed)
+
+        WindowGroup("BetterShot Annotate", id: "ANNOTATION_EDITOR", for: URL.self) { value in
+            AnnotationEditorWindow(url: value)
+        }
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 1100, height: 760)
+
+        WindowGroup("BetterShot Recording Editor", id: "VIDEO_EDITOR", for: URL.self) { value in
+            RecordingStudioWindow(url: value)
+        }
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 1360, height: 860)
+    }
+
+    /// The menu bar popover, preview card, and settings history are
+    /// AppKit-hosted and have no scene of their own, so they reach the
+    /// editors through these closures.
+    private func configureEditorPresentation() {
+        PreviewPanelPresenter.shared.onAnnotate = { [openWindow] url in
+            openWindow(id: "ANNOTATION_EDITOR", value: ScreenshotHistoryStore.shared.annotationEditorURL(for: url))
+        }
+        PreviewPanelPresenter.shared.onEditVideo = { [openWindow] url in
+            openWindow(id: "VIDEO_EDITOR", value: ScreenshotHistoryStore.shared.editorURL(for: url))
+        }
+        RecordingProjectOpener.shared.openHandler = { [openWindow] directoryURL in
+            openWindow(id: "VIDEO_EDITOR", value: directoryURL)
+        }
+
+        ScreenRecordingManager.shared.onFinishRecording = { session, displayID in
+            let saveToFolder = AfterCaptureActions.isEnabled(.save, for: .recording)
+            Task { @MainActor in
+                let historyURL = await ScreenshotHistoryStore.shared.importRecordingSession(session)
+                RecordingProjectStore.shared.reload()
+                if AppPreferences.openEditorAfterRecording {
+                    PreviewPanelPresenter.shared.onEditVideo?(historyURL)
+                } else {
+                    PreviewOverlay.shared.show(url: historyURL)
+                }
+                if saveToFolder {
+                    do {
+                        _ = try await RecordingDeliverable.saveToDefaultLocation(for: historyURL)
+                        ToastWindow.shared.show(message: "Recording saved!", on: ActiveDisplayResolver.screen(for: displayID))
+                    } catch {
+                        ToastWindow.shared.show(
+                            isError: true, title: "Couldn't save recording",
+                            message: error.localizedDescription,
+                            systemIcon: "exclamationmark.triangle",
+                            on: ActiveDisplayResolver.screen(for: displayID)
+                        )
+                    }
+                }
+            }
         }
     }
 }

@@ -6,50 +6,60 @@ struct MenuBarPanelView: View {
     var dismissPopover: @MainActor () -> Void
     @State private var isVisible = false
 
-    private let arrowWidth: CGFloat = 22
-    private let arrowHeight: CGFloat = 10
-    private let panelRadius: CGFloat = 12
+    private static let arrowHeight: CGFloat = 9
 
     var body: some View {
-        VStack(spacing: 0) {
-            PopoverArrow()
-                .fill(Color(nsColor: .windowBackgroundColor))
-                .frame(width: arrowWidth, height: arrowHeight)
-
-            MenuBarContentView(dismissPopover: dismissPopover)
-                .background(Color(nsColor: .windowBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: panelRadius, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: panelRadius, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
-                )
-        }
-        .shadow(color: .black.opacity(0.18), radius: 20, y: 8)
-        .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
-        .scaleEffect(isVisible ? 1 : 0.92, anchor: .top)
-        .opacity(isVisible ? 1 : 0)
-        .blur(radius: isVisible ? 0 : 4)
-        .onAppear {
-            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-                isVisible = true
+        MenuBarContentView(dismissPopover: dismissPopover)
+            .padding(.top, Self.arrowHeight)
+            .glassSurface(in: MenuBarPanelShape(arrowHeight: Self.arrowHeight), depth: .raised)
+            .scaleEffect(isVisible ? 1 : 0.94, anchor: .top)
+            .opacity(isVisible ? 1 : 0)
+            .blur(radius: isVisible ? 0 : 4)
+            .padding(.horizontal, 8)
+            .padding(.bottom, 8)
+            .onAppear {
+                withAnimation(RecordingMotion.showHideSpring) {
+                    isVisible = true
+                }
             }
-        }
     }
 }
 
-// MARK: - Arrow Shape
+// MARK: - Panel Shape
 
-private struct PopoverArrow: Shape {
+/// One continuous outline for the arrow and the body: two adjacent shapes would show a seam where their strokes meet.
+private struct MenuBarPanelShape: Shape {
+    var arrowHeight: CGFloat
+    var arrowWidth: CGFloat = 22
+    var cornerRadius: CGFloat = 12
+    var tipRadius: CGFloat = 2.5
+
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        let radius: CGFloat = 2.5
-        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.midX - radius, y: rect.minY + radius))
+        let top = rect.minY + arrowHeight
+        let r = cornerRadius
+        let half = arrowWidth / 2
+
+        path.move(to: CGPoint(x: rect.minX + r, y: top))
+        path.addLine(to: CGPoint(x: rect.midX - half, y: top))
+        path.addLine(to: CGPoint(x: rect.midX - tipRadius, y: rect.minY + tipRadius))
         path.addQuadCurve(
-            to: CGPoint(x: rect.midX + radius, y: rect.minY + radius),
+            to: CGPoint(x: rect.midX + tipRadius, y: rect.minY + tipRadius),
             control: CGPoint(x: rect.midX, y: rect.minY)
         )
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.midX + half, y: top))
+        path.addLine(to: CGPoint(x: rect.maxX - r, y: top))
+        path.addArc(center: CGPoint(x: rect.maxX - r, y: top + r), radius: r,
+                    startAngle: .degrees(-90), endAngle: .degrees(0), clockwise: false)
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - r))
+        path.addArc(center: CGPoint(x: rect.maxX - r, y: rect.maxY - r), radius: r,
+                    startAngle: .degrees(0), endAngle: .degrees(90), clockwise: false)
+        path.addLine(to: CGPoint(x: rect.minX + r, y: rect.maxY))
+        path.addArc(center: CGPoint(x: rect.minX + r, y: rect.maxY - r), radius: r,
+                    startAngle: .degrees(90), endAngle: .degrees(180), clockwise: false)
+        path.addLine(to: CGPoint(x: rect.minX, y: top + r))
+        path.addArc(center: CGPoint(x: rect.minX + r, y: top + r), radius: r,
+                    startAngle: .degrees(180), endAngle: .degrees(270), clockwise: false)
         path.closeSubpath()
         return path
     }
@@ -61,88 +71,62 @@ struct MenuBarContentView: View {
     var dismissPopover: @MainActor () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 10) {
             captureGrid
-                .padding(.horizontal, 10)
-                .padding(.top, 10)
-                .padding(.bottom, 8)
 
-            TrayDivider()
-
-            utilityGrid
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
+            utilityStack
 
             if PinnedScreenshotController.shared.hasPinnedWindows {
-                TrayDivider()
-
-                TrayFullWidthButton(title: L10n.string("Unpin All"), icon: "pin.slash") {
+                TrayFullWidthButton(title: "Unpin All Windows", icon: "pin.slash") {
                     PinnedScreenshotController.shared.unpinAll()
                     dismissPopover()
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
             }
 
             TrayDivider()
 
             footerGrid
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
 
             versionLabel
-                .padding(.bottom, 8)
         }
-        .frame(width: 290)
+        .padding(.horizontal, 12)
+        .padding(.top, 12)
+        .padding(.bottom, 10)
+        .frame(width: 296)
     }
 
     // MARK: - Capture Grid
 
+    private static let columns = [
+        GridItem(.flexible(), spacing: 6),
+        GridItem(.flexible(), spacing: 6),
+    ]
+
     private var captureGrid: some View {
-        let columns = [
-            GridItem(.flexible(), spacing: 6),
-            GridItem(.flexible(), spacing: 6),
-        ]
+        VStack(spacing: 6) {
+            LazyVGrid(columns: Self.columns, spacing: 6) {
+                TrayGridButton(title: "Region", icon: "rectangle.dashed", action: .region) {
+                    dismissAndRun(.region)
+                }
 
-        return LazyVGrid(columns: columns, spacing: 6) {
-            TrayGridButton(title: L10n.string("Region"), icon: "rectangle.dashed", shortcut: "\u{2318}4") {
-                dismissAndRun(.region)
-            }
+                TrayGridButton(title: "Screen", icon: "desktopcomputer", action: .fullscreen) {
+                    dismissAndRun(.fullscreen)
+                }
 
-            TrayGridButton(title: L10n.string("Screen"), icon: "desktopcomputer", shortcut: "\u{2318}3") {
-                dismissAndRun(.fullscreen)
-            }
+                TrayGridButton(title: "Window", icon: "macwindow", action: .window) {
+                    dismissAndRun(.window)
+                }
 
-            TrayGridButton(title: L10n.string("Window"), icon: "macwindow", shortcut: "\u{2318}\u{21E7}5") {
-                dismissAndRun(.window)
-            }
-
-            TrayGridButton(title: L10n.string("Long Screenshot"), icon: "scroll", shortcut: "\u{2318}\u{21E7}6") {
-                dismissAndRun(.longScreenshot)
-            }
-
-            TrayGridButton(title: L10n.string("Pick Color"), icon: "eyedropper") {
-                dismissAndRun(.colorPicker)
-            }
-
-            TrayGridMenu(title: L10n.string("Record"), icon: "record.circle", menuItems: [
-                TrayMenuItem(title: L10n.string("Full Screen"), icon: "desktopcomputer") {
-                    nonisolated(unsafe) let screen = originScreen
+                TrayGridButton(title: "Record", icon: "record.circle", action: .recordingOptions) {
                     dismissPopover()
-                    Task.detached {
-                        try? await Task.sleep(nanoseconds: 200_000_000)
-                        await startRecording(mode: .fullScreen, on: screen)
-                    }
-                },
-                TrayMenuItem(title: L10n.string("Area"), icon: "rectangle.dashed") {
-                    nonisolated(unsafe) let screen = originScreen
-                    dismissPopover()
-                    Task.detached {
-                        try? await Task.sleep(nanoseconds: 200_000_000)
-                        await startRecording(mode: .area, on: screen)
-                    }
-                },
-            ])
+                    RecordingBarPresenter.shared.showPicker(recordingOptions: true)
+                }
+            }
+
+            TrayGridButton(title: "Scrolling Capture", icon: "rectangle.expand.vertical", action: .scrollCapture) {
+                dismissAndRun(.scrollCapture)
+            }
+            .accessibilityIdentifier("scrollCaptureStart")
         }
     }
 
@@ -156,35 +140,38 @@ struct MenuBarContentView: View {
         HistoryStore.shared.records.filter { $0.kind == .recording }
     }
 
-    private var utilityGrid: some View {
-        let columns = [
-            GridItem(.flexible(), spacing: 6),
-            GridItem(.flexible(), spacing: 6),
-        ]
+    private var utilityStack: some View {
+        VStack(spacing: 6) {
+            LazyVGrid(columns: Self.columns, spacing: 6) {
+                TrayGridButton(title: "OCR", icon: "doc.text.viewfinder", action: .ocr) {
+                    dismissAndRun(.ocr)
+                }
 
-        return LazyVGrid(columns: columns, spacing: 6) {
-            TrayGridButton(title: L10n.string("OCR"), icon: "doc.text.viewfinder", shortcut: "\u{2318}O") {
-                dismissAndRun(.ocr)
+                TrayGridButton(title: "Pick Color", icon: "eyedropper", action: .colorPicker) {
+                    dismissAndRun(.colorPicker)
+                }
             }
 
-            TrayGridMenu(title: L10n.string("Recent"), icon: "clock.arrow.circlepath", menuItems: recentMenuItems())
+            TrayGridMenu(title: "Recent Captures", icon: "clock.arrow.circlepath", menuItems: recentMenuItems())
+                .frame(height: 32)
+
+            TrayFullWidthButton(title: "Media Gallery", icon: "photo.on.rectangle") {
+                let screen = originScreen
+                dismissPopover()
+                DispatchQueue.main.async { MediaGalleryWindowController.shared.open(on: screen) }
+            }
         }
     }
 
     // MARK: - Footer
 
     private var footerGrid: some View {
-        let columns = [
-            GridItem(.flexible(), spacing: 6),
-            GridItem(.flexible(), spacing: 6),
-        ]
-
-        return LazyVGrid(columns: columns, spacing: 6) {
-            TrayGridButton(title: L10n.string("Settings"), icon: "gearshape", shortcut: "\u{2318},") {
+        LazyVGrid(columns: Self.columns, spacing: 6) {
+            TrayGridButton(title: "Settings", icon: "gearshape") {
                 openSettings()
             }
 
-            TrayGridButton(title: L10n.string("Quit"), icon: "power", shortcut: "\u{2318}Q") {
+            TrayGridButton(title: "Quit", icon: "power") {
                 NSApplication.shared.terminate(nil)
             }
         }
@@ -194,17 +181,24 @@ struct MenuBarContentView: View {
 
     private var versionLabel: some View {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
-        return HStack(spacing: 4) {
+        let update = AppUpdater.shared.latestAvailableVersion
+
+        return HStack(spacing: 5) {
             Text(L10n.format("Version %@", version))
                 .font(.system(size: 10))
-                .foregroundStyle(.quaternary)
+                .foregroundStyle(.tertiary)
 
-            if AppUpdater.shared.latestAvailableVersion != nil {
-                Circle()
-                    .fill(.blue)
-                    .frame(width: 6, height: 6)
+            if let update {
+                Text("\u{00B7}")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+
+                Text(L10n.format("%@ available in Settings", update))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.tint)
             }
         }
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Actions
@@ -214,15 +208,14 @@ struct MenuBarContentView: View {
     }
 
     private func dismissAndRun(_ action: ShortcutService.Action) {
-        nonisolated(unsafe) let screen = originScreen
+        let screen = ActiveDisplayResolver.screenForScreenshotCapture() ?? originScreen
         dismissPopover()
-        Task.detached {
-            try? await Task.sleep(nanoseconds: 200_000_000)
+        Task { @MainActor in
             await CaptureOrchestrator.shared.performCapture(action, on: screen)
         }
     }
 
-    private func recentMenuItems() -> [TrayMenuItem] {
+    func recentMenuItems() -> [TrayMenuItem] {
         var items: [TrayMenuItem] = []
 
         var screenshotItems: [TrayMenuItem] = []
@@ -230,19 +223,10 @@ struct MenuBarContentView: View {
             screenshotItems.append(TrayMenuItem(title: L10n.string("No screenshots yet"), icon: "photo", action: {}, isDisabled: true))
         } else {
             for record in recentScreenshots.prefix(8) {
-                screenshotItems.append(TrayMenuItem(title: record.filename, icon: "photo") { [record] in
-                    let screen = originScreen
-                    dismissPopover()
-                    let url = HistoryStore.shared.displayURLForRecord(record)
-                    PreviewOverlay.shared.show(url: url, on: screen)
+                screenshotItems.append(TrayMenuItem(title: record.displayName, icon: "photo") { [record] in
+                    openRecentCapture(record)
                 })
             }
-            screenshotItems.append(.separator())
-            screenshotItems.append(TrayMenuItem(title: L10n.string("Clear Screenshots"), icon: "trash", action: {
-                HistoryStore.shared.records
-                    .filter { $0.kind == .screenshot }
-                    .forEach { HistoryStore.shared.deleteRecord($0) }
-            }, isDestructive: true))
         }
         items.append(TrayMenuItem(title: L10n.string("Screenshots"), icon: "photo.on.rectangle", action: {}, submenu: screenshotItems))
 
@@ -251,51 +235,35 @@ struct MenuBarContentView: View {
             recordingItems.append(TrayMenuItem(title: L10n.string("No recordings yet"), icon: "video", action: {}, isDisabled: true))
         } else {
             for record in recentRecordings.prefix(8) {
-                recordingItems.append(TrayMenuItem(title: record.filename, icon: "video") { [record] in
-                    let screen = originScreen
-                    dismissPopover()
-                    let url = HistoryStore.shared.displayURLForRecord(record)
-                    PreviewOverlay.shared.show(url: url, on: screen)
+                recordingItems.append(TrayMenuItem(title: record.displayName, icon: "video") { [record] in
+                    openRecentCapture(record)
                 })
             }
-            recordingItems.append(.separator())
-            recordingItems.append(TrayMenuItem(title: L10n.string("Clear Recordings"), icon: "trash", action: {
-                HistoryStore.shared.records
-                    .filter { $0.kind == .recording }
-                    .forEach { HistoryStore.shared.deleteRecord($0) }
-            }, isDestructive: true))
         }
         items.append(TrayMenuItem(title: L10n.string("Recordings"), icon: "video.circle", action: {}, submenu: recordingItems))
 
         return items
     }
 
+    private func openRecentCapture(_ record: CaptureRecord) {
+        let screen = originScreen
+        let url = HistoryStore.shared.displayURLForRecord(record)
+        dismissPopover()
+        // Present once native menu tracking has ended. Explicitly reopened
+        // captures stay visible until acted on, regardless of the capture timer.
+        DispatchQueue.main.async {
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                ToastWindow.shared.show(isError: true, title: L10n.string("Capture unavailable"), message: L10n.string("This file has been moved or deleted."), systemIcon: "exclamationmark.triangle", on: screen)
+                return
+            }
+            PreviewOverlay.shared.show(url: url, on: screen, automaticallyDismiss: false)
+        }
+    }
+
     private func openSettings() {
         let screen = originScreen
         dismissPopover()
         SettingsWindowController.shared.open(on: screen)
-    }
-
-    private enum RecordingMode {
-        case fullScreen, area
-    }
-
-    @MainActor
-    private func startRecording(mode: RecordingMode = .fullScreen, on screen: NSScreen? = nil) async {
-        do {
-            let started: Bool
-            switch mode {
-            case .fullScreen:
-                started = try await ScreenRecordingManager.shared.startFullScreenRecording()
-            case .area:
-                started = try await ScreenRecordingManager.shared.startAreaRecording()
-            }
-            if started {
-                RecordingStatusBarController.shared.show(on: screen)
-            }
-        } catch {
-            print("Recording failed: \(error.localizedDescription)")
-        }
     }
 
 }
@@ -305,41 +273,62 @@ struct MenuBarContentView: View {
 struct TrayGridButton: View {
     let title: String
     let icon: String
-    var shortcut: String? = nil
-    let action: () -> Void
+    var action: ShortcutService.Action? = nil
+    let perform: () -> Void
 
     @State private var isHovered = false
 
+    private var shortcut: ShortcutService.Shortcut? {
+        action.flatMap { ShortcutService.shared.effectiveShortcut(for: $0) }
+    }
+
     var body: some View {
-        Button(action: action) {
+        Button(action: perform) {
             HStack(spacing: 6) {
                 Image(systemName: icon)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.primary.opacity(0.7))
+                    .foregroundStyle(.secondary)
                     .frame(width: 16)
 
-                Text(title)
+                Text(L10n.string(title))
                     .font(.system(size: 12, weight: .medium))
-                    .lineLimit(1)
+                    .fixedSize()
 
                 Spacer(minLength: 2)
 
                 if let shortcut {
-                    Text(shortcut)
-                        .font(.system(size: 9, weight: .medium, design: .rounded))
-                        .foregroundStyle(.primary.opacity(0.25))
+                    Text(shortcut.displayString)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                        .fixedSize()
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isHovered ? Color.primary.opacity(0.15) : Color.primary.opacity(0.08))
-            )
+            .padding(.horizontal, 9)
+            .frame(height: 32)
+            .background(TrayButtonBackground(isHovered: isHovered))
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(TrayButtonStyle())
         .onHover { isHovered = $0 }
+        .accessibilityLabel(L10n.string(title))
+        .accessibilityValue(shortcut?.accessibilityDescription ?? "")
+    }
+}
+
+private struct TrayButtonBackground: View {
+    let isHovered: Bool
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(Color.primary.opacity(isHovered ? 0.14 : 0.06))
+            .animation(.easeOut(duration: 0.12), value: isHovered)
+    }
+}
+
+private struct TrayButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.6 : 1)
     }
 }
 
@@ -382,7 +371,7 @@ final class TrayGridMenuButton: NSView {
     private var trackingArea: NSTrackingArea?
 
     init(title: String, icon: String, menuItems: [TrayMenuItem]) {
-        self.titleText = title
+        self.titleText = L10n.string(title)
         self.iconName = icon
         self.menuItems = menuItems
         super.init(frame: .zero)
@@ -415,6 +404,7 @@ final class TrayGridMenuButton: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let menu = NSMenu()
+        menu.autoenablesItems = false
         for item in menuItems {
             if item.isSeparator {
                 menu.addItem(.separator())
@@ -426,6 +416,7 @@ final class TrayGridMenuButton: NSView {
                     parentItem.image = img
                 }
                 let sub = NSMenu()
+                sub.autoenablesItems = false
                 for subItem in submenuItems {
                     if subItem.isSeparator {
                         sub.addItem(.separator())
@@ -471,18 +462,18 @@ final class TrayGridMenuButton: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let bgColor: NSColor = isHovered
-            ? NSColor.labelColor.withAlphaComponent(0.15)
-            : NSColor.labelColor.withAlphaComponent(0.08)
+            ? NSColor.labelColor.withAlphaComponent(0.14)
+            : NSColor.labelColor.withAlphaComponent(0.06)
 
         let path = NSBezierPath(roundedRect: bounds, xRadius: 8, yRadius: 8)
         bgColor.setFill()
         path.fill()
 
-        let iconColor = NSColor.labelColor.withAlphaComponent(0.7)
+        let iconColor = NSColor.secondaryLabelColor
         let iconConfig = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
 
-        let iconX: CGFloat = 8
-        let textX: CGFloat = 30
+        let iconX: CGFloat = 9
+        let textX: CGFloat = 31
         let chevronWidth: CGFloat = 20
         let centerY = bounds.midY
 
@@ -502,7 +493,7 @@ final class TrayGridMenuButton: NSView {
         let textPoint = NSPoint(x: textX, y: centerY - textSize.height / 2)
         (titleText as NSString).draw(at: textPoint, withAttributes: attrs)
 
-        let chevronColor = NSColor.labelColor.withAlphaComponent(0.25)
+        let chevronColor = NSColor.tertiaryLabelColor
         let chevronConfig = NSImage.SymbolConfiguration(pointSize: 8, weight: .bold)
         if let chevron = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)?
             .withSymbolConfiguration(chevronConfig) {
@@ -544,23 +535,20 @@ private struct TrayFullWidthButton: View {
             HStack(spacing: 6) {
                 Image(systemName: icon)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.primary.opacity(0.7))
+                    .foregroundStyle(.secondary)
                     .frame(width: 16)
 
-                Text(title)
+                Text(L10n.string(title))
                     .font(.system(size: 12, weight: .medium))
 
                 Spacer()
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isHovered ? Color.primary.opacity(0.15) : Color.primary.opacity(0.08))
-            )
+            .padding(.horizontal, 9)
+            .frame(height: 32)
+            .background(TrayButtonBackground(isHovered: isHovered))
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(TrayButtonStyle())
         .onHover { isHovered = $0 }
     }
 }
@@ -570,6 +558,6 @@ private struct TrayFullWidthButton: View {
 private struct TrayDivider: View {
     var body: some View {
         Divider()
-            .padding(.horizontal, 12)
+            .opacity(0.6)
     }
 }

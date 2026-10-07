@@ -1,0 +1,2021 @@
+import AppKit
+import AVFoundation
+import Carbon
+import SwiftUI
+import TourKit
+@testable import BetterShot
+
+/// Offscreen snapshots and model checks, plus a brief native transfer-toast lifecycle check.
+/// Set BETTERSHOT_CHECK_LIBRARY_WINDOWS=1 for displayed gallery/Settings screenshots.
+/// AVPlayer layers and interactive capture still require manual testing.
+@MainActor
+func checkEditorUI(imageURL: URL, movieURL: URL) async throws {
+    if ProcessInfo.processInfo.environment["BETTERSHOT_CHECK_EDITOR_WINDOWS"] == "1" {
+        try await checkEditorWindowInteractions(imageURL: imageURL, movieURL: movieURL)
+    }
+    try checkCaptureControlsUI()
+    checkRecordingConfirmations()
+    try checkImageTransforms(imageURL: imageURL)
+    try await checkColorPickerAndToast()
+    try await checkPreviewOverlay(imageURL: imageURL)
+    try await checkMediaGallery(imageURL: imageURL, movieURL: movieURL)
+    checkTransferToastPresentation(movieURL: movieURL)
+    try await checkGeneralEditorDefaults(movieURL: movieURL)
+    try await checkCameraAspectRatios(movieURL: movieURL)
+    for appearanceName in [NSAppearance.Name.aqua, .darkAqua] {
+        NSAppearance(named: appearanceName)!.performAsCurrentDrawingAppearance {
+            let neutral = StudioChrome.accentNSColor.usingColorSpace(.deviceRGB)!
+            precondition(abs(neutral.redComponent - neutral.greenComponent) < 0.001
+                         && abs(neutral.greenComponent - neutral.blueComponent) < 0.001,
+                         "Editor chrome must remain neutral in both appearances")
+        }
+    }
+    // A fixed suite, cleared first: a UUID name left one plist per run behind.
+    let suiteName = "BetterShotTests-shortcuts"
+    let shortcutDefaults = UserDefaults(suiteName: suiteName)!
+    shortcutDefaults.removePersistentDomain(forName: suiteName)
+    defer { shortcutDefaults.removePersistentDomain(forName: suiteName) }
+    let shortcuts = ShortcutService.Shortcut.self
+    precondition(shortcuts.defaultRegion.keyCode == UInt32(kVK_ANSI_4))
+    precondition(shortcuts.defaultRecording.keyCode == UInt32(kVK_ANSI_2))
+    precondition(shortcuts.defaultRecordingOptions.keyCode == UInt32(kVK_ANSI_5))
+    for (oldRegionKey, oldRecordingKey, enabled) in [
+        (kVK_ANSI_2, kVK_ANSI_5, true),
+        (kVK_ANSI_2, kVK_ANSI_5, false),
+        (kVK_ANSI_7, kVK_ANSI_8, true)
+    ] {
+        shortcutDefaults.removePersistentDomain(forName: suiteName)
+        shortcutDefaults.set(true, forKey: "bs_captureShortcuts050Migrated")
+        var region = shortcuts.defaultRegion
+        region.keyCode = UInt32(oldRegionKey)
+        region.enabled = enabled
+        var recording = shortcuts.defaultRecording
+        recording.keyCode = UInt32(oldRecordingKey)
+        recording.enabled = enabled
+        try shortcutDefaults.set(JSONEncoder().encode(region), forKey: "bs_hotkey_1")
+        try shortcutDefaults.set(JSONEncoder().encode(recording), forKey: "bs_hotkey_6")
+        ShortcutService.migrateCaptureShortcuts(defaults: shortcutDefaults)
+        let migratedRegion = try JSONDecoder().decode(ShortcutService.Shortcut.self,
+            from: shortcutDefaults.data(forKey: "bs_hotkey_1")!)
+        let migratedRecording = try JSONDecoder().decode(ShortcutService.Shortcut.self,
+            from: shortcutDefaults.data(forKey: "bs_hotkey_6")!)
+        precondition(migratedRegion.keyCode == UInt32(oldRegionKey == kVK_ANSI_2 ? kVK_ANSI_4 : oldRegionKey))
+        precondition(migratedRecording.keyCode == UInt32(oldRecordingKey == kVK_ANSI_5 ? kVK_ANSI_2 : oldRecordingKey))
+        precondition(migratedRegion.enabled == enabled && migratedRecording.enabled == enabled)
+        // A later intentional reassignment must survive subsequent launches.
+        try shortcutDefaults.set(JSONEncoder().encode(recording), forKey: "bs_hotkey_6")
+        ShortcutService.migrateCaptureShortcuts(defaults: shortcutDefaults)
+        let reassigned = try JSONDecoder().decode(ShortcutService.Shortcut.self,
+            from: shortcutDefaults.data(forKey: "bs_hotkey_6")!)
+        precondition(reassigned == recording)
+    }
+    print("PASS screenshot/recording defaults, migration, custom bindings, and disabled shortcuts")
+    checkShortcutCustomization(defaults: shortcutDefaults)
+
+    let imageModel = AnnotationEditorModel()
+    imageModel.previewImage = NSImage(contentsOf: imageURL)!
+    imageModel.imageSize = CGSize(width: 1920, height: 1080)
+    imageModel.viewportSize = CGSize(width: 1000, height: 600)
+    imageModel.displayScale = 2
+    imageModel.setZoomPercent(100)
+    imageModel.zoomIn()
+    precondition(imageModel.zoomPercent == 125)
+    imageModel.zoomOut()
+    precondition(imageModel.zoomPercent == 100)
+    imageModel.setZoomPercent(999)
+    precondition(imageModel.zoomPercent == 400)
+    imageModel.setZoomPercent(0)
+    precondition(imageModel.zoomPercent == 10)
+    imageModel.fitCanvas()
+    precondition(imageModel.zoomToFit && imageModel.panOffset == .zero)
+
+    for tool in AnnotationTool.allCases where tool != .select {
+        imageModel.selectTool(.select)
+        imageModel.selectTool(tool)
+        precondition(imageModel.selectedTool == tool)
+        imageModel.selectTool(tool)
+        precondition(imageModel.selectedTool == .select, "Second tool click returns to selection")
+    }
+    precondition(GradientPreset.presets.count == 10)
+    precondition(AnnotationBackgroundGradient.presets.map(\.id) == GradientPreset.presets.map(\.id))
+    for gradient in AnnotationBackgroundGradient.presets {
+        let stored = StoredGradient(gradient)
+        let restored = try JSONDecoder().decode(StoredGradient.self, from: JSONEncoder().encode(stored))
+        precondition(restored.backgroundGradient == gradient, "Gradient stops and highlights persist")
+        let preset = gradient.preset!
+        precondition(preset.locations?.count == 3 && preset.highlights?.count == 2)
+    }
+    print("PASS tool deselection and ten shared gradient definitions / saved highlights")
+
+    var cursorStyle = RecordingStudioStyle()
+    cursorStyle.cursor.appearance = .macOS
+    cursorStyle.cursor.hideWhenIdle = true
+    let cursorData = try JSONEncoder().encode(StoredRecordingStudioStyle(cursorStyle))
+    let restoredStyle = try JSONDecoder().decode(StoredRecordingStudioStyle.self, from: cursorData)
+    precondition(restoredStyle.value.cursor == cursorStyle.cursor, "Cursor settings survive project save and reopen")
+    var legacyStyle = try JSONSerialization.jsonObject(with: cursorData) as! [String: Any]
+    legacyStyle.removeValue(forKey: "cursor")
+    let legacyData = try JSONSerialization.data(withJSONObject: legacyStyle)
+    let legacyCursor = try JSONDecoder().decode(StoredRecordingStudioStyle.self, from: legacyData).value.cursor
+    precondition(legacyCursor == RecordingCursorOptions(), "Older projects retain the recorded cursor and existing motion")
+    for appearance in [RecordingCursorAppearance.macOS, .dark, .light, .dot] {
+        let artwork = PointerArtworkCapture.styledArtwork(appearance)!
+        let bitmap = NSBitmapImageRep(data: artwork.imageData)!
+        precondition(bitmap.pixelsWide == 1024 && bitmap.pixelsHigh == 1280,
+                     "Custom cursors must retain enough pixels for enlarged Retina / 4K output")
+        precondition(bitmap.colorAt(x: 0, y: 0)!.alphaComponent == 0, "Cursor background stays transparent")
+        precondition(bitmap.colorAt(x: (appearance == .dot ? 16 : 10) * 32, y: 20 * 32)!.alphaComponent > 0.99,
+                     "Cursor artwork must contain an opaque, visible shape")
+        precondition(artwork.referenceSize.width == 32 && artwork.referenceSize.height == 40)
+        let expectedAnchor = appearance == .dot ? CGPoint(x: 0.5, y: 0.5) : CGPoint(x: 5.0 / 32, y: 0.1)
+        precondition(artwork.normalizedAnchor == expectedAnchor, "High-resolution artwork must preserve its click hotspot")
+        precondition(artwork == PointerArtworkCapture.styledArtwork(appearance), "Cursor artwork is cached")
+    }
+    let hand = PointerArtworkCapture.styledArtwork(.hand)!
+    let nativeHand = PointerArtworkCapture.capture(NSCursor.pointingHand, id: "bettershot-cursor-hand")!
+    precondition(hand == nativeHand, "Hand uses the actual macOS artwork, full raster, logical size, and hotspot")
+    precondition(hand == PointerArtworkCapture.styledArtwork(.hand), "Native hand artwork is cached")
+    let arrow = PointerArtworkCapture.styledArtwork(.macOS)!
+    let arrowBitmap = NSBitmapImageRep(data: arrow.imageData)!
+    precondition(arrowBitmap.colorAt(x: 12 * 32, y: 16 * 32)!.redComponent < 0.01,
+                 "Outlined arrow has a black interior")
+    precondition(arrowBitmap.colorAt(x: 5 * 32, y: 4 * 32)!.redComponent > 0.9,
+                 "Outlined arrow has a contrasting white edge")
+    precondition(arrowBitmap.colorAt(x: 22 * 32, y: 32 * 32)!.alphaComponent == 0,
+                 "Arrow has no stem or cloud")
+    precondition(arrow == PointerArtworkCapture.styledArtwork(.macOS), "Outlined arrow artwork is cached")
+    let cursorModel = RecordingStudioModel(url: movieURL)
+    cursorModel.setCursorAppearance(.macOS)
+    precondition(cursorModel.style.cursorScale == 2.5 && cursorModel.style.cursor.appearance == .macOS)
+    cursorModel.style.cursorScale = 3.5
+    cursorModel.setCursorAppearance(.macOS)
+    precondition(cursorModel.style.cursorScale == 3.5, "Keep a larger user-selected cursor size")
+    cursorModel.setCursorAppearance(.dark)
+    precondition(cursorModel.style.cursorScale == 3.5, "Other styles retain the Size setting")
+    cursorModel.teardown()
+    precondition(RecordingCursorAppearance.selectableCases.contains(.macOS)
+                 && !RecordingCursorAppearance.selectableCases.contains(.hand))
+    let legacyHand = try JSONDecoder().decode(RecordingCursorAppearance.self, from: Data("\"hand\"".utf8))
+    precondition(legacyHand == .hand, "Existing Hand projects remain readable")
+    let delayFormat = InspectorValueFormat.seconds(never: CGFloat(AppPreferences.overlayDismissNever))
+    precondition(delayFormat.displayString(for: 5) == "5s")
+    precondition(delayFormat.displayString(for: 16) == "Never")
+    precondition(delayFormat.parse(" never ") == 16 && delayFormat.parse("5s") == 5)
+    precondition(delayFormat.parse("invalid") == nil && delayFormat.parse("NaN") == nil)
+    precondition(InspectorValueFormat.points.parse("24 pt") == 24 && InspectorValueFormat.points.step == 4)
+    precondition(InspectorValueFormat.percent(step: 0.05).step == 0.05)
+    print("PASS outlined arrow, large sizing, and legacy hand capture/cache, cursor persistence, and settings slider input")
+    let multiResolutionCursor = NSImage(size: NSSize(width: 16, height: 20))
+    for scale in [1, 4] {
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 16 * scale, pixelsHigh: 20 * scale,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        rep.size = multiResolutionCursor.size
+        multiResolutionCursor.addRepresentation(rep)
+    }
+    let captured = PointerArtworkCapture.capture(NSCursor(image: multiResolutionCursor,
+        hotSpot: NSPoint(x: 1, y: 2)), id: "retina-check")!
+    let capturedBitmap = NSBitmapImageRep(data: captured.imageData)!
+    precondition(capturedBitmap.pixelsWide == 64 && capturedBitmap.pixelsHigh == 80,
+                 "Recorded cursors must keep their largest bitmap representation")
+    precondition(captured.referenceSize.width == 16 && captured.anchorPoint.x == 1 && captured.anchorPoint.y == 2)
+    precondition(NSImage(systemSymbolName: "camera.viewfinder", accessibilityDescription: nil) != nil)
+    print("PASS high-resolution cursor PNGs, transparency, hotspots, Retina capture, and native menu symbol")
+    let stillCapture = PointerCaptureFile(travel: (0...24).map {
+        PointerTravelSample(time: Double($0) / 4, x: 0.5, y: 0.5)
+    })
+    var cursorOptions = RecordingCursorOptions()
+    cursorOptions.hideWhenIdle = true
+    let idlePointer = PointerTimeline.build(capture: stillCapture, duration: 6, options: cursorOptions)
+    precondition(idlePointer.frame(at: 5)!.opacity < 0.01, "Stationary keep-alive samples do not prevent idle hiding")
+    cursorOptions.isVisible = false
+    let hiddenPointer = PointerTimeline.build(capture: stillCapture, duration: 6, options: cursorOptions)
+    precondition(hiddenPointer.frame(at: 0)!.opacity == 0 && hiddenPointer.frame(at: 5)!.press == nil)
+    cursorOptions.isVisible = true
+    cursorOptions.smoothMotion = false
+    cursorOptions.pressEffect = false
+    cursorOptions.rippleEffect = true
+    let clickCapture = PointerCaptureFile(travel: [
+        PointerTravelSample(time: 0, x: 0.1, y: 0.1),
+        PointerTravelSample(time: 0.5, x: 0.8, y: 0.6)
+    ], presses: [PointerPressEvent(time: 0.6, x: 0.8, y: 0.6, button: 0, phase: .down)])
+    let styledArtwork = PointerArtworkCapture.styledArtwork(.macOS)!
+    let naturalPointer = PointerTimeline.build(capture: clickCapture, duration: 1, options: cursorOptions,
+                                               overrideArtwork: styledArtwork)
+    let clickFrame = naturalPointer.frame(at: 0.65)!
+    precondition(clickFrame.location == CGPoint(x: 0.8, y: 0.6) && clickFrame.tiltDegrees == 0)
+    precondition(clickFrame.artworkID == styledArtwork.artworkID && abs(clickFrame.magnification - 1) < 0.001)
+    precondition(clickFrame.press?.impactEnabled == false && clickFrame.press?.rippleEnabled == true)
+    print("PASS cursor styles, saved/legacy settings, natural motion, separate click effects, and idle visibility")
+
+    let videoModel = RecordingStudioModel(url: movieURL)
+    await videoModel.load()
+    defer { videoModel.teardown() }
+    videoModel.beginVideoCrop()
+    precondition(videoModel.isCroppingVideo)
+    videoModel.beginVideoCrop()
+    precondition(!videoModel.isCroppingVideo && videoModel.cropDraft == videoModel.cropRect)
+    videoModel.toggleMaskTool(.pixelate)
+    precondition(videoModel.isEditingMasks && videoModel.selectedMask?.effect == .pixelate)
+    videoModel.setSelectedMaskCropOnly(false)
+    precondition(videoModel.selectedMask?.rect == RecordingVideoCrop.unit)
+    videoModel.setSelectedMaskCropOnly(true)
+    precondition(abs(videoModel.selectedMask!.rect.width - 0.35) < 0.0001)
+    videoModel.toggleMaskTool(.pixelate)
+    precondition(!videoModel.isEditingMasks)
+    videoModel.toggleMaskTool(.blur)
+    precondition(videoModel.selectedMask?.effect == .blur)
+    videoModel.deleteSelectedMask()
+    videoModel.endMaskEditing()
+    print("PASS video crop toggle, blur / pixelate selection, and Crop Only scope")
+
+    precondition(videoModel.isLoaded, "Snapshot recording must load")
+    let speedClipID = videoModel.clipTimeline.segments[0].id
+    for (rate, expectedDuration) in [(0.5, 4.0), (1.25, 1.6), (1.5, 4.0 / 3), (2.5, 0.8)] {
+        videoModel.setClipSpeed(rate, forClipID: speedClipID)
+        precondition(abs(videoModel.duration - expectedDuration) < 0.000_001)
+        precondition(videoModel.clipTimeline.segments[0].speed == rate)
+    }
+    videoModel.setClipSpeed(1, forClipID: speedClipID)
+    print("PASS custom fractional clip speeds update the editor timeline")
+
+    let dragModel = RecordingStudioModel(url: movieURL)
+    await dragModel.load()
+    defer { dragModel.teardown() }
+    let dragClipID = dragModel.clipTimeline.segments[0].id
+    precondition(!dragModel.canUndo, "A freshly loaded recording starts with no undo history")
+    dragModel.beginClipSpeedEdit()
+    for tick in [1.2, 1.4, 1.6] {
+        dragModel.setClipSpeed(tick, forClipID: dragClipID)
+        precondition(dragModel.clipTimeline.segments[0].speed == 1, "A drag tick must not rebuild the timeline")
+    }
+    dragModel.endClipSpeedEdit()
+    precondition(dragModel.clipTimeline.segments[0].speed == 1.6, "Release commits the last dragged speed once")
+    precondition(dragModel.canUndo, "A completed drag registers exactly one undo step")
+    dragModel.undo()
+    precondition(dragModel.clipTimeline.segments[0].speed == 1, "One undo restores the pre-drag speed")
+    precondition(!dragModel.canUndo, "A single undo fully reverts the one-step drag")
+    dragModel.beginClipSpeedEdit()
+    dragModel.setClipSpeed(1.3, forClipID: dragClipID)
+    dragModel.setClipSpeed(1, forClipID: dragClipID)
+    dragModel.endClipSpeedEdit()
+    precondition(dragModel.clipTimeline.segments[0].speed == 1, "Dragging back to the start settles on the original speed")
+    precondition(!dragModel.canUndo, "Returning to the original value during a drag adds no undo step")
+    print("PASS a speed slider drag registers exactly one undo step and a round trip adds none")
+    let originalCues = videoModel.zoomCues
+    videoModel.addZoomCue(fromEditorTime: 0.25, toEditorTime: 1.25)
+    precondition(videoModel.zoomEnabled, "Adding a zoom must enable playback of zooms")
+    let cue = videoModel.selectedCue!
+    precondition(videoModel.zoomTimelineBlocks.count == 1)
+    videoModel.beginZoomCueEdit()
+    var edited = cue
+    edited.zoom = 2
+    videoModel.updateZoomCue(edited)
+    videoModel.endZoomCueEdit(actionName: "Edit Zoom")
+    precondition(videoModel.selectedCue?.zoom == 2)
+    videoModel.undo()
+    // The synchronous harness groups creation and editing into one input event.
+    precondition(videoModel.zoomCues == originalCues)
+    precondition(!videoModel.zoomEnabled, "Undo must restore the imported video's disabled zoom state")
+    videoModel.redo()
+    precondition(videoModel.zoomCues.first?.zoom == 2)
+    precondition(videoModel.zoomEnabled, "Redo must restore zoom playback")
+
+    let cutTimeline = RecordingClipTimeline(segments: [
+        RecordingClipSegment(sourceStart: 1, sourceEnd: 5, speed: 2),
+        RecordingClipSegment(sourceStart: 7, sourceEnd: 9)
+    ])
+    precondition(cutTimeline.cutMarkers(sourceDuration: 10) == [
+        .init(sourceStart: 0, sourceEnd: 1, editorTime: 0),
+        .init(sourceStart: 5, sourceEnd: 7, editorTime: 2),
+        .init(sourceStart: 9, sourceEnd: 10, editorTime: 4)
+    ], "Removed footage markers cover leading, middle, and trailing cuts at edited playback times")
+    precondition(RecordingClipTimeline(segments: [
+        RecordingClipSegment(sourceStart: 0, sourceEnd: 5),
+        RecordingClipSegment(sourceStart: 5, sourceEnd: 10)
+    ]).cutMarkers(sourceDuration: 10) == [.init(sourceStart: 5, sourceEnd: 5, editorTime: 5)],
+                 "A split alone shows scissors without a removed duration")
+    precondition(cutTimeline.cutMarkers(sourceDuration: .nan).isEmpty)
+    let previewMarker = RecordingClipTimeline.CutMarker(sourceStart: 0.2, sourceEnd: 0.8, editorTime: 0.2)
+    let cutFrame = try await StudioTimelineCutPreview.frame(sourceURL: movieURL, marker: previewMarker)
+    precondition(cutFrame.width > 0 && cutFrame.width <= 480 && cutFrame.height <= 270,
+                 "Cut hover preview loads a bounded source frame")
+    print("PASS cut badges, removed durations, speed-aware positions, and source preview")
+
+    let clipControl = RecordingClipTimelineControl(frame: NSRect(x: 0, y: 0, width: 600, height: 52))
+    clipControl.update(timeline: videoModel.clipTimeline, sourceDuration: videoModel.sourceDuration,
+                       thumbnails: videoModel.timelineThumbnails, selectedClipID: nil, playheadTime: 0)
+    var splitTime: Double?
+    clipControl.splitRequested = { splitTime = $0 }
+    clipControl.toggleSplitRequested = { clipControl.isSplitting.toggle() }
+    clipControl.keyDown(with: NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+        timestamp: 0, windowNumber: 0, context: nil, characters: "s", charactersIgnoringModifiers: "s",
+        isARepeat: false, keyCode: 1)!)
+    precondition(clipControl.isSplitting && splitTime == nil, "S activates the tool without making a cut")
+    clipControl.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: CGPoint(x: 300, y: 26),
+        modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil, eventNumber: 0,
+        clickCount: 1, pressure: 1)!)
+    precondition(abs((splitTime ?? -1) - videoModel.duration / 2) < 0.01, "The split tool cuts at the click")
+    precondition(clipControl.isSplitting, "Scissors stays selected after a cut")
+    clipControl.update(timeline: videoModel.clipTimeline, sourceDuration: videoModel.sourceDuration,
+                       thumbnails: videoModel.timelineThumbnails, selectedClipID: nil, playheadTime: 0)
+    clipControl.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: CGPoint(x: 450, y: 26),
+        modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil, eventNumber: 1,
+        clickCount: 1, pressure: 1)!)
+    precondition(clipControl.isSplitting && abs((splitTime ?? -1) - videoModel.duration * 0.75) < 0.01,
+                 "Repeated cuts and timeline updates keep scissors selected")
+    clipControl.keyDown(with: NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+        timestamp: 0, windowNumber: 0, context: nil, characters: "s", charactersIgnoringModifiers: "s",
+        isARepeat: false, keyCode: 1)!)
+    precondition(!clipControl.isSplitting, "S explicitly deselects scissors")
+    clipControl.toggleSplitRequested = nil
+    print("PASS split tool, zoom editing, and undo/redo")
+    let output = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent(".build/editor-snapshots")
+    try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+    let buildConfiguration = ProcessInfo.processInfo.environment["BETTERSHOT_BUILD_CONFIGURATION"] ?? "Debug"
+    let appBundle = Bundle(url: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent("\(ProcessInfo.processInfo.environment["BETTERSHOT_DERIVED_DATA"] ?? ".build/tests")/Build/Products/\(buildConfiguration)/BetterShot.app"))!
+    let practiceDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: practiceDirectory) }
+    for sample in OnboardingSample.allCases {
+        let source = sample.sourceURL(in: appBundle)!
+        let original = try Data(contentsOf: source)
+        let first = try sample.makeWorkingCopy(in: practiceDirectory, bundle: appBundle)
+        let second = try sample.makeWorkingCopy(in: practiceDirectory, bundle: appBundle)
+        precondition(first != second, "Repeated practice preserves earlier edits")
+        let copied = try Data(contentsOf: first)
+        precondition(copied == original, "Practice starts from the full original PNG")
+        try Data("edited".utf8).write(to: first, options: .atomic)
+        let unchanged = try Data(contentsOf: source)
+        precondition(unchanged == original, "Practice never edits bundled artwork")
+        do {
+            _ = try sample.makeWorkingCopy(in: first, bundle: appBundle)
+            preconditionFailure("An unwritable destination must report failure")
+        } catch {}
+    }
+    for demo in OnboardingDemo.allCases {
+        let posterURL = demo.url(extension: "png", in: appBundle)!
+        let poster = NSImage(contentsOf: posterURL)!
+        precondition(poster.size.width / poster.size.height == 16 / 9, "Demo posters must match the player aspect ratio")
+        let movie = AVURLAsset(url: demo.url(extension: "mp4", in: appBundle)!)
+        let playable = try await movie.load(.isPlayable)
+        let duration = try await movie.load(.duration).seconds
+        let audio = try await movie.loadTracks(withMediaType: .audio)
+        precondition(playable && abs(duration - 6) < 0.1 && audio.isEmpty,
+                     "Onboarding demos must be playable, six seconds, and silent")
+    }
+    precondition(OnboardingPermissionStatus.media(.authorized) == .allowed)
+    precondition(OnboardingPermissionStatus.media(.notDetermined) == .notEnabled)
+    precondition(OnboardingPermissionStatus.media(.denied) == .denied)
+    precondition(OnboardingPermissionStatus.media(.restricted) == .restricted)
+    for permission in OnboardingPermission.allCases {
+        precondition(!permission.needsSettings(status: .notEnabled, attempted: false))
+        precondition(permission.needsSettings(status: .denied, attempted: false))
+        precondition(!permission.needsSettings(status: .allowed, attempted: true))
+        precondition(!permission.needsSettings(status: .restricted, attempted: true))
+        precondition(permission.needsSettings(status: .notEnabled, attempted: true) == permission.mayNeedRestart,
+                     "Undecided camera/microphone requests remain retryable; system permissions offer Settings after a request")
+    }
+    let permissionState = OnboardingPermissions()
+    permissionState.refresh()
+    for permission in OnboardingPermission.allCases {
+        await permissionState.request(permission)
+        permissionState.openSettings(permission)
+        precondition(permissionState.status(permission) == .notEnabled && permissionState.attempted.isEmpty,
+                     "The test runner must never request real permissions or persist setup attempts")
+        precondition(permission.settingsURL.scheme == "x-apple.systempreferences")
+    }
+    let releaseNotes = try ReleaseNotesWindowController.load(in: appBundle)
+    let releaseVersion = appBundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as! String
+    let currentNotes = releaseNotes.filter { $0.version == releaseVersion }
+    precondition(currentNotes.count == 1 && !currentNotes[0].body.isEmpty, "Every shipped version needs bundled release notes")
+    let tourPages = OnboardingView.tourPages(in: appBundle)
+    precondition(tourPages.count == 3)
+    for page in tourPages {
+        precondition(appBundle.url(forResource: page.imageName, withExtension: nil) != nil, "Tour artwork must ship in the app")
+    }
+    for scheme in [ColorScheme.light, .dark] {
+        for width: CGFloat in [420, 640] {
+            try snapshot(ReleaseNotesView(version: releaseVersion, notes: currentNotes, onClose: {}),
+                scheme: scheme, width: width,
+                to: output.appendingPathComponent("release-notes-\(scheme)-\(Int(width)).png"), height: 660)
+        }
+        for index in tourPages.indices {
+            try snapshot(TourSlideshowView(pages: tourPages, width: 472, initialPageIndex: index,
+                finishButtonTitle: "Set Up Permissions", onFinish: {}, onClose: {})
+                .transaction { $0.disablesAnimations = true },
+                scheme: scheme, width: 472,
+                to: output.appendingPathComponent("tour-page-\(index)-\(scheme).png"), height: 510)
+        }
+        try snapshot(ZStack(alignment: .topLeading) {
+            Color.secondary.opacity(0.1)
+            Recording3DInsertionGhost(range: 1...4, pointsPerSecond: 100)
+        }.frame(height: 36).padding(12), scheme: scheme, width: 600,
+            to: output.appendingPathComponent("3d-insertion-ghost-\(scheme).png"), height: 60)
+        for step in OnboardingView.Step.allCases {
+            for width: CGFloat in [520, 760] {
+                try snapshot(OnboardingView(step: step, resourceBundle: appBundle, isPermissionPreview: false),
+                    scheme: scheme, width: width,
+                    to: output.appendingPathComponent("onboarding-\(step)-\(scheme)-\(Int(width)).png"),
+                    height: width == 520 ? 560 : 680)
+            }
+        }
+        for width: CGFloat in [520, 760] {
+            try snapshot(OnboardingDemoView(demo: .recording, resourceBundle: appBundle).padding(32),
+                scheme: scheme, width: width,
+                to: output.appendingPathComponent("onboarding-recording-demo-\(scheme)-\(Int(width)).png"), height: 460)
+        }
+        try snapshot(VStack(spacing: 12) {
+            OnboardingPermissionRow(permission: .screen, status: .notEnabled, attempted: true,
+                request: {}, openSettings: {})
+            OnboardingPermissionRow(permission: .camera, status: .denied, request: {}, openSettings: {})
+            OnboardingPermissionRow(permission: .microphone, status: .restricted, request: {}, openSettings: {})
+            OnboardingPermissionRow(permission: .accessibility, status: .allowed, request: {}, openSettings: {})
+            OnboardingPermissionRow(permission: .microphone, status: .notEnabled, attempted: true,
+                request: {}, openSettings: {})
+            OnboardingPermissionRow(permission: .screen, status: .notEnabled, attempted: true,
+                errorMessage: "Couldn’t open settings. Try again, or open System Settings manually.",
+                request: {}, openSettings: {})
+        }.padding(16), scheme: scheme, width: 520,
+            to: output.appendingPathComponent("onboarding-permission-recovery-\(scheme).png"), height: 900)
+    }
+    print("PASS onboarding artwork copies, permission status mapping/testing guard, recovery states, bundled silent demos, and all three steps in compact/light/dark snapshots")
+    try snapshot(LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 12) {
+        ForEach(GradientPreset.presets) { preset in
+            VStack {
+                GradientBackgroundView(preset: preset).frame(height: 130).clipShape(RoundedRectangle(cornerRadius: 8))
+                Text(preset.name).font(.caption)
+            }
+        }
+    }.padding(), scheme: .light, width: 900, to: output.appendingPathComponent("shared-gradients.png"), height: 360)
+    for scheme in [ColorScheme.light, .dark] {
+        let name = scheme == .light ? "light" : "dark"
+        try snapshot(PreferencesView(selection: .general), scheme: scheme, width: 780,
+            to: output.appendingPathComponent("general-background-\(name).png"), height: 2600)
+        do {
+            let key = AfterCaptureAction.save.storageKey(for: .screenshot)
+            let stored = UserDefaults.standard.object(forKey: key)
+            defer { UserDefaults.standard.set(stored, forKey: key) }
+            for enabled in [false, true] {
+                UserDefaults.standard.set(enabled, forKey: key)
+                try snapshot(GeneralSettingsTab(), scheme: scheme, width: 580,
+                    to: output.appendingPathComponent("general-saving-\(enabled)-\(name).png"), height: 2600)
+            }
+        }
+        try snapshot(PreferencesView(selection: .sharing), scheme: scheme, width: 780,
+                     to: output.appendingPathComponent("sharing-buttons-\(name).png"), height: 720)
+        try snapshot(VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
+                Button("Test Connection") {}
+                Label("Connected", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+            }
+            HStack {
+                Button("Restore Defaults…", role: .destructive) {}
+                Button("Clear Locked Keys", role: .destructive) {}
+            }
+            HStack {
+                Button("Test Connection") {}.disabled(true)
+                Button("Delete", role: .destructive) {}.disabled(true)
+                Button("Selected") {}.buttonStyle(EditorButtonStyle(selected: true))
+            }
+        }.buttonStyle(EditorButtonStyle(bordered: true)).padding(20),
+            scheme: scheme, width: 480,
+            to: output.appendingPathComponent("button-states-\(name).png"), height: 180)
+        try snapshot(RecordingExportOptionsPopover(initialSettings: VideoCompressionSettings(), onConfirm: { _ in }),
+                     scheme: scheme, width: 312,
+                     to: output.appendingPathComponent("export-options-\(name).png"), height: 580)
+        try snapshot(RecordingSettingsTab(), scheme: scheme, width: 580,
+                     to: output.appendingPathComponent("recording-settings-\(name).png"), height: 1100)
+        for group in ShortcutService.Group.allCases {
+            try snapshot(ShortcutSettingsTab(category: group), scheme: scheme, width: 580,
+                         to: output.appendingPathComponent("shortcuts-\(group.rawValue)-\(name).png"), height: 1400)
+        }
+        try snapshot(GeneralSettingsTab(), scheme: scheme, width: 580,
+                     to: output.appendingPathComponent("general-settings-\(name).png"), height: 1300)
+        try snapshot(CaptureSettingsTab(), scheme: scheme, width: 580,
+                     to: output.appendingPathComponent("capture-settings-\(name).png"), height: 720)
+        try snapshot(MenuBarContentView(dismissPopover: {}), scheme: scheme, width: 296,
+                     to: output.appendingPathComponent("tray-recording-\(name).png"), height: 640)
+    }
+    try snapshot(HStack(spacing: 24) {
+        ForEach([RecordingCursorAppearance.macOS, .dark, .light, .dot], id: \.self) { appearance in
+            VStack {
+                HStack(spacing: 0) {
+                    ForEach([Color.white, Color.black], id: \.self) { background in
+                        Image(nsImage: NSImage(data: PointerArtworkCapture.styledArtwork(appearance)!.imageData)!)
+                            .resizable().interpolation(.high).scaledToFit()
+                            .padding(12).frame(width: 120, height: 150).background(background)
+                    }
+                }
+                Text(appearance.title)
+            }
+        }
+    }.padding(), scheme: .light, width: 1100, to: output.appendingPathComponent("cursor-quality.png"), height: 220)
+    var effectToggle = StudioEffectToggleState()
+    precondition(effectToggle.amount(enabled: true, current: 0, defaultValue: 0.45) == 0.45)
+    precondition(effectToggle.amount(enabled: false, current: 0.75, defaultValue: 0.45) == 0)
+    precondition(effectToggle.amount(enabled: true, current: 0, defaultValue: 0.45) == 0.75)
+    precondition(effectToggle.amount(enabled: false, current: 0, defaultValue: 0.45) == 0)
+    precondition(effectToggle.amount(enabled: true, current: 0, defaultValue: 0.45) == 0.75)
+    print("PASS effect toggle defaults and previous amount restoration")
+    for scheme in [ColorScheme.light, .dark] {
+        let name = scheme == .light ? "light" : "dark"
+        try snapshot(AnnotationScreenshotBorderInspector(
+            settings: .constant(AnnotationScreenshotBorderSettings()), onEditorAction: {}
+        ).padding(InspectorMetrics.horizontalPadding), scheme: scheme, width: 260,
+                     to: output.appendingPathComponent("border-controls-\(name).png"), height: 210)
+        try snapshot(Form {
+            Section {
+                InspectorSlider("Padding", value: .constant(0.15), range: 0...0.45, format: .percent())
+                InspectorSlider("Corner Radius", value: .constant(0.011), range: 0...0.12,
+                                format: .percent(fractionDigits: 1))
+                InspectorSlider("Shadow", value: .constant(0.3), range: 0...1, format: .percent())
+            }
+        }.formStyle(.grouped), scheme: scheme, width: 580,
+                     to: output.appendingPathComponent("settings-sliders-\(name).png"), height: 200)
+        try snapshot(CaptureSettingsTab(), scheme: scheme, width: 580,
+                     to: output.appendingPathComponent("capture-settings-\(name).png"), height: 800)
+        for (label, status) in [
+            ("upload", TransferStatus.working(stage: .uploading, progress: 0.42)),
+            ("render", .working(stage: .rendering, progress: nil)),
+            ("invalid-progress", .working(stage: .uploading, progress: .nan)),
+            ("link", .linkReady(url: URL(string: "https://example.com/capture/test")!)),
+            ("export", .exported(url: movieURL)),
+            ("error", .failed(headline: "Upload failed", message: "Check your connection and try again.", canRetry: true))
+        ] {
+            try snapshot(TransferStatusCard(status: status), scheme: scheme, width: 360,
+                         to: output.appendingPathComponent("transfer-\(label)-\(name).png"), height: 112)
+        }
+        try snapshot(
+            AnnotationEditorWindow(url: .constant(nil), model: imageModel),
+            scheme: scheme, width: 1280, to: output.appendingPathComponent("image-\(name).png"))
+        try snapshot(
+            RecordingStudioContent(model: videoModel),
+            scheme: scheme, width: 1280, to: output.appendingPathComponent("video-\(name).png"))
+    }
+    try snapshot(AnnotationEditorWindow(url: .constant(nil), model: imageModel),
+                 scheme: .light, width: 980, to: output.appendingPathComponent("image-compact.png"))
+    try snapshot(AnnotationEditorWindow(url: .constant(nil), model: imageModel),
+                 scheme: .dark, width: 980, to: output.appendingPathComponent("image-compact-dark.png"))
+    for tool in [AnnotationTool.text, .arrow, .blur] {
+        imageModel.selectTool(tool)
+        for scheme in [ColorScheme.light, .dark] {
+            let name = scheme == .light ? "light" : "dark"
+            try snapshot(AnnotationEditorWindow(url: .constant(nil), model: imageModel),
+                         scheme: scheme, width: 980,
+                         to: output.appendingPathComponent("image-compact-\(tool.rawValue)-\(name).png"))
+        }
+    }
+    imageModel.selectTool(.select)
+    try snapshot(RecordingStudioContent(model: videoModel),
+                 scheme: .light, width: 1100, to: output.appendingPathComponent("video-compact.png"))
+    videoModel.selectedCueID = nil
+    videoModel.selectedClipID = nil
+    for scheme in [ColorScheme.light, .dark] {
+        let name = scheme == .light ? "light" : "dark"
+        try snapshot(RecordingStudioContent(model: videoModel), scheme: scheme, width: 1100,
+                     to: output.appendingPathComponent("video-effects-\(name).png"))
+    }
+    videoModel.add3DShot(at: 0)
+    for scheme in [ColorScheme.light, .dark] {
+        let name = scheme == .light ? "light" : "dark"
+        for width: CGFloat in [260, 320] {
+            try snapshot(Recording3DInspector(model: videoModel), scheme: scheme, width: width,
+                to: output.appendingPathComponent("video-3d-all-controls-\(name)-\(Int(width)).png"), height: 3400)
+            try snapshot(StudioInspector(model: videoModel, initialTab: .effects), scheme: scheme, width: width + 48,
+                to: output.appendingPathComponent("video-3d-control-shortcuts-\(name)-\(Int(width)).png"), height: 800)
+        }
+        try snapshot(Recording3DAutoScenePicker(model: videoModel, dismiss: {}), scheme: scheme, width: 360,
+            to: output.appendingPathComponent("video-auto-scene-\(name).png"), height: 390)
+        try snapshot(RecordingStudioContent(model: videoModel), scheme: scheme, width: 1100,
+                     to: output.appendingPathComponent("video-3d-\(name).png"))
+    }
+    if var closeUp = videoModel.selected3DShot {
+        closeUp.apply(.closeUp)
+        videoModel.update3DShot(closeUp)
+        for scheme in [ColorScheme.light, .dark] {
+            let name = scheme == .light ? "light" : "dark"
+            try snapshot(Recording3DInspector(model: videoModel), scheme: scheme, width: 320,
+                to: output.appendingPathComponent("video-3d-close-up-controls-\(name).png"), height: 3000)
+        }
+    }
+    if var focusShot = videoModel.selected3DShot {
+        for mode in [Recording3DBlur.Mode.radial, .directional, .tiltShift] {
+            focusShot.blur?.mode = mode
+            videoModel.update3DShot(focusShot)
+            for scheme in [ColorScheme.light, .dark] {
+                let name = scheme == .light ? "light" : "dark"
+                try snapshot(Recording3DBlurInspector(model: videoModel).padding(12), scheme: scheme, width: 260,
+                    to: output.appendingPathComponent("video-3d-blur-\(mode.rawValue)-\(name).png"), height: 560)
+            }
+        }
+    }
+    if var animated = videoModel.selected3DShot {
+        animated.tracks = [.init(property: .panX, keyframes: [
+            .init(position: 0, value: -0.2), .init(position: 0.5, value: 0.1), .init(position: 1, value: 0.3)
+        ])]
+        videoModel.update3DShot(animated)
+        for scheme in [ColorScheme.light, .dark] {
+            let name = scheme == .light ? "light" : "dark"
+            try snapshot(Recording3DKeyframeEditor(model: videoModel).padding(12), scheme: scheme, width: 260,
+                         to: output.appendingPathComponent("video-3d-keyframes-\(name).png"), height: 850)
+        }
+    }
+    if let id = videoModel.selected3DShotID { videoModel.remove3DShot(id: id) }
+    videoModel.splitClip(at: videoModel.duration / 2)
+    var firstClip = videoModel.clipTimeline.segments[0]
+    firstClip.sourceStart += 0.2
+    videoModel.trimClip(firstClip)
+    var lastClip = videoModel.clipTimeline.segments[1]
+    lastClip.sourceStart += 0.2
+    lastClip.sourceEnd -= 0.2
+    videoModel.trimClip(lastClip)
+    precondition(videoModel.clipTimeline.cutMarkers(sourceDuration: videoModel.sourceDuration).count == 3)
+    try snapshot(RecordingStudioContent(model: videoModel), scheme: .dark, width: 1100,
+                 to: output.appendingPathComponent("video-cuts-dark.png"))
+    try snapshot(StudioTimelineCutPreview(marker: previewMarker, sourceURL: movieURL),
+                 scheme: .dark, width: 270, to: output.appendingPathComponent("cut-preview-dark.png"), height: 220)
+    videoModel.resetClips()
+    precondition(videoModel.clipTimeline.cutMarkers(sourceDuration: videoModel.sourceDuration).isEmpty,
+                 "Restoring the original recording clears removed footage markers")
+    videoModel.selectedCueID = nil
+    videoModel.setClipSpeed(1.25, forClipID: videoModel.clipTimeline.segments[0].id)
+    for scheme in [ColorScheme.light, .dark] {
+        let name = scheme == .light ? "light" : "dark"
+        videoModel.selectedClipID = nil
+        try snapshot(RecordingStudioContent(model: videoModel), scheme: scheme, width: 1100,
+                     to: output.appendingPathComponent("video-fractional-speed-\(name).png"), interact: {
+            videoModel.selectClip(id: videoModel.clipTimeline.segments[0].id)
+        })
+    }
+
+    let recentMenu = MenuBarContentView(dismissPopover: {}).recentMenuItems()
+    precondition(recentMenu.map(\.title) == ["Screenshots", "Recordings"])
+    precondition(recentMenu.flatMap { $0.submenu ?? [] }.allSatisfy { !$0.isDestructive },
+                 "Recent capture navigation must not delete files")
+    print("PASS combined recent menu without bulk deletion")
+    print("PASS editor zoom bounds, fit, and light/dark view snapshots: \(output.path)")
+}
+
+@MainActor
+private func checkCameraAspectRatios(movieURL: URL) async throws {
+    let sourceSize = CGSize(width: 1920, height: 1080)
+    precondition(ExportAspectPreset.wide16x10.canvasSize(for: sourceSize) == CGSize(width: 1728, height: 1080))
+    precondition(ExportAspectPreset.standard4x3.canvasSize(for: sourceSize) == CGSize(width: 1440, height: 1080))
+    let session = RecordingSession(directoryURL: FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString + ".bettershotrec"))
+    try FileManager.default.createDirectory(at: session.directoryURL, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: session.directoryURL) }
+    try FileManager.default.copyItem(at: movieURL, to: session.screenURL)
+    try FileManager.default.copyItem(at: movieURL, to: session.cameraURL)
+    var manifest = CaptureManifest()
+    manifest.pointerSynthesized = true
+    try session.writeCaptureManifest(manifest)
+    try session.writePointerCapture(PointerCaptureFile(travel: [
+        PointerTravelSample(time: 0, x: 0.5, y: 0.5)
+    ]))
+    let model = RecordingStudioModel(url: session.directoryURL)
+    await model.load()
+    defer { model.teardown() }
+    precondition(model.hasCameraVideo)
+    model.setCameraAspectRatio(.vertical)
+    model.undo()
+    precondition(model.style.camera.aspectRatio == .square)
+    model.redo()
+    precondition(model.style.camera.aspectRatio == .vertical)
+
+    for cameraRatio in RecordingCameraAspectRatio.allCases {
+        model.style.camera.aspectRatio = cameraRatio
+        for videoRatio in ExportAspectPreset.allCases {
+            model.exportAspect = videoRatio
+            for mode in ExportAspectContentMode.allCases {
+                model.exportAspectMode = mode
+                for center in [CGPoint(x: 0.5, y: 0.5), .zero, CGPoint(x: 1, y: 1)] {
+                    model.style.camera.center = center
+                    let canvas = model.previewCanvasSize
+                    let layout = RecordingStudioLayout.make(canvasSize: canvas, style: model.style,
+                        includeBubble: true, contentAspect: model.previewContentAspect,
+                        contentMode: model.previewContentMode)
+                    let rect = layout.bubbleRect
+                    precondition(abs(rect.width / rect.height - cameraRatio.ratio) < 0.000001)
+                    precondition(rect.minX >= 0 && rect.minY >= 0
+                        && rect.maxX <= canvas.width + 0.000001 && rect.maxY <= canvas.height + 0.000001,
+                        "Every camera ratio must stay inside every video canvas")
+                    let preview = RecordingStudioLayout.make(
+                        canvasSize: CGSize(width: canvas.width / 2, height: canvas.height / 2),
+                        style: model.style, includeBubble: true)
+                    precondition(abs(preview.bubbleRect.width * 2 - rect.width) < 0.000001,
+                                 "Preview and export use the same proportional camera frame")
+                }
+                let document = RecordingEditDocument(style: model.style, zoomEnabled: false,
+                    zoomCues: [], exportAspect: videoRatio, exportAspectMode: mode)
+                let restored = try JSONDecoder().decode(RecordingEditDocument.self,
+                    from: JSONEncoder().encode(document))
+                precondition(restored.style.value == model.style && restored.exportAspectPreset == videoRatio
+                             && restored.exportAspectContentMode == mode)
+            }
+        }
+    }
+    model.exportAspect = .original
+    model.style.layoutPreset = .bubble
+    let previousStyle = model.style
+    model.setLayoutPreset(.overlap)
+    model.undo()
+    precondition(model.style == previousStyle, "Layout undo must restore camera shape and size too")
+    model.redo()
+    precondition(model.style.layoutPreset == .overlap && model.style.camera.aspectRatio == .square)
+    for preset in [RecordingLayoutPreset.bubble, .overlap] {
+        model.style.layoutPreset = preset
+        model.style.camera.aspectRatio = .vertical
+        model.style.camera.size = 0.55
+        model.style.camera.roundness = 0.08
+        let tallStyle = model.style
+        model.setLayoutPreset(preset)
+        precondition(model.style.camera.aspectRatio == .square && model.style.camera.size == 0.26
+                     && model.style.camera.roundness == 0.25,
+                     "Both floating presets, including reselection, restore the 0.5.2 camera dimensions")
+        let layout = RecordingStudioLayout.make(canvasSize: sourceSize, style: model.style, includeBubble: true)
+        precondition(abs(layout.bubbleRect.width - 1080 * 0.26) < 0.001
+                     && layout.bubbleRect.width == layout.bubbleRect.height)
+        model.undo()
+        precondition(model.style == tallStyle, "Resetting a camera preset must be undoable")
+        model.redo()
+        precondition(model.style.camera.size == 0.26 && model.style.camera.aspectRatio == .square)
+    }
+    model.setCameraOnLeft(true)
+    model.undo()
+    precondition(!model.style.cameraOnLeft)
+    model.redo()
+    precondition(model.style.cameraOnLeft)
+    for preset in RecordingLayoutPreset.allCases {
+        model.setLayoutPreset(preset)
+        for videoRatio in ExportAspectPreset.allCases {
+            let canvas = videoRatio.canvasSize(for: sourceSize)
+            for mode in [RecordingStudioLayout.ContentMode.fill, .fit] {
+                model.style.cameraOnLeft = false
+                let right = RecordingStudioLayout.make(canvasSize: canvas, style: model.style,
+                    includeBubble: true, contentAspect: 16.0 / 9.0, contentMode: mode)
+                precondition(right.showsScreen == (preset != .cameraOnly))
+                precondition((right.bubbleRect.width > 0) == (preset != .screenOnly))
+                for rect in [right.cardRect, right.bubbleRect] where rect.width > 0 {
+                    precondition(rect.minX >= -1 && rect.minY >= -1
+                        && rect.maxX <= canvas.width + 1 && rect.maxY <= canvas.height + 1)
+                }
+                precondition(abs(right.contentFillSize.width / right.contentFillSize.height - 16.0 / 9.0) < 0.000001,
+                             "Screen footage must retain its aspect in every layout")
+                if preset == .sideBySide || preset == .presenter {
+                    precondition(right.cardRect.maxX <= right.bubbleRect.minX + 1,
+                                 "Separate screen and camera layouts must not overlap")
+                }
+                model.style.cameraOnLeft = true
+                let left = RecordingStudioLayout.make(canvasSize: canvas, style: model.style,
+                    includeBubble: true, contentAspect: 16.0 / 9.0, contentMode: mode)
+                if preset.positionsCamera {
+                    precondition(abs(left.bubbleRect.minX - (canvas.width - right.bubbleRect.maxX)) < 0.001)
+                    precondition(abs(left.cardRect.minX - (canvas.width - right.cardRect.maxX)) < 0.001)
+                }
+                let missing = RecordingStudioLayout.make(canvasSize: canvas, style: model.style,
+                    includeBubble: false)
+                precondition(missing.showsScreen && missing.bubbleRect == .zero,
+                             "A missing or hidden camera must fall back to the screen")
+            }
+        }
+        let stored = StoredRecordingStudioStyle(model.style)
+        let decoded = try JSONDecoder().decode(StoredRecordingStudioStyle.self, from: JSONEncoder().encode(stored))
+        precondition(decoded.value == model.style, "Layout and position must survive project/preset persistence")
+    }
+    model.setLayoutPreset(.cameraOnly)
+    model.beginVideoCrop()
+    model.toggleMaskTool(.blur)
+    precondition(!model.isCroppingVideo && !model.isEditingMasks,
+                 "Screen tools cannot start invisibly in Camera Only")
+    model.style = previousStyle
+    var legacy = try JSONSerialization.jsonObject(
+        with: JSONEncoder().encode(StoredRecordingStudioStyle(model.style))) as! [String: Any]
+    legacy.removeValue(forKey: "cameraAspectRatio")
+    legacy.removeValue(forKey: "layoutPreset")
+    legacy.removeValue(forKey: "cameraOnLeft")
+    let restored = try JSONDecoder().decode(StoredRecordingStudioStyle.self,
+        from: JSONSerialization.data(withJSONObject: legacy))
+    precondition(restored.value.layoutPreset == .bubble && !restored.value.cameraOnLeft)
+    precondition(restored.value.camera.aspectRatio == .square, "Older projects keep their square camera")
+    precondition(restored == StoredRecordingStudioStyle(restored.value), "Legacy presets still match their style")
+    model.style.camera.roundness = 0
+    let squareCorners = RecordingStudioLayout.make(canvasSize: model.previewCanvasSize,
+        style: model.style, includeBubble: true)
+    precondition(squareCorners.bubbleCornerRadius == 0)
+    model.style.camera.roundness = 0.5
+    let rounded = RecordingStudioLayout.make(canvasSize: model.previewCanvasSize,
+        style: model.style, includeBubble: true)
+    precondition(rounded.bubbleCornerRadius == min(rounded.bubbleRect.width, rounded.bubbleRect.height) / 2)
+    model.style.camera.isVisible = false
+    precondition(RecordingStudioLayout.make(canvasSize: model.previewCanvasSize,
+        style: model.style, includeBubble: true).bubbleRect == .zero)
+    model.style.camera.isVisible = true
+    model.style.cursor.appearance = .macOS
+    let output = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent(".build/editor-snapshots")
+    try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+    for scheme in [ColorScheme.light, .dark] {
+        for width: CGFloat in [260, 340] {
+            try snapshot(StudioInspector(model: model, initialTab: .camera), scheme: scheme, width: width,
+                to: output.appendingPathComponent("camera-ratios-\(scheme)-\(Int(width)).png"), height: 520)
+            try snapshot(StudioInspector(model: model, initialTab: .cursor), scheme: scheme, width: width,
+                to: output.appendingPathComponent("native-cursor-\(scheme)-\(Int(width)).png"), height: 520)
+            try snapshot(StudioInspector(model: model), scheme: scheme, width: width,
+                to: output.appendingPathComponent("video-ratios-\(scheme)-\(Int(width)).png"), height: 800)
+        }
+    }
+    let customColor = AnnotationBackgroundColor.custom(from: Color(.sRGB, red: 0.2, green: 0.45, blue: 0.4))
+    var customColorSettings = AnnotationBackgroundSettings()
+    customColorSettings.style = .solid(customColor)
+    let savedBackground = model.style.background
+    model.style.background = .solid(customColor)
+    for scheme in [ColorScheme.light, .dark] {
+        for width: CGFloat in [260, 340] {
+            try snapshot(AnnotationBackgroundInspector(settings: .constant(customColorSettings),
+                wallpaperStore: .shared, onEditorAction: {}, onPickWallpaper: {}).padding(12),
+                scheme: scheme, width: width,
+                to: output.appendingPathComponent("image-custom-color-\(scheme)-\(Int(width)).png"), height: 520)
+            try snapshot(StudioInspector(model: model), scheme: scheme, width: width,
+                to: output.appendingPathComponent("video-custom-color-\(scheme)-\(Int(width)).png"), height: 800)
+        }
+    }
+    model.style.background = savedBackground
+    for preset in RecordingLayoutPreset.allCases {
+        model.setLayoutPreset(preset)
+        for scheme in [ColorScheme.light, .dark] {
+            try snapshot(StudioInspector(model: model, initialTab: .camera), scheme: scheme, width: 260,
+                to: output.appendingPathComponent("camera-layout-\(preset.rawValue)-\(scheme).png"), height: 800)
+        }
+    }
+    print("PASS screen/camera layout geometry, mirrored positions, fallback, legacy persistence, undo, and compact inspectors")
+    print("PASS camera/video ratios, bounds, preview/export scaling, project/preset compatibility, undo/redo, and compact camera inspectors")
+}
+
+@MainActor
+private func checkGeneralEditorDefaults(movieURL: URL) async throws {
+    let defaults = UserDefaults.standard
+    let keys = ["bs_defaultBeautifierConfig", "recordingStudio.defaultBackground.v1",
+                "recordingStudio.lastUsedBackground.v1"]
+    let previous = keys.map { defaults.object(forKey: $0) }
+    defer { for (key, value) in zip(keys, previous) { defaults.set(value, forKey: key) } }
+    defaults.set(try JSONEncoder().encode(StoredBackgroundStyle.solid(StoredColor(.black))),
+                 forKey: "recordingStudio.defaultBackground.v1")
+    var custom = BeautifierConfig()
+    custom.style = .gradient(GradientPreset.presets[0])
+    custom.padding = 0.15
+    custom.cornerRadius = 0.04
+    custom.shadowStrength = 0.7
+    var zeroPadding = custom
+    zeroPadding.padding = 0
+    for config in [BeautifierConfig.default, custom, zeroPadding] {
+        AppPreferences.defaultBeautifierConfig = config
+        precondition(AppPreferences.defaultBeautifierConfig == config, "General must persist zero padding exactly")
+        let session = RecordingSession(directoryURL: FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString + ".bettershotrec"))
+        try FileManager.default.createDirectory(at: session.directoryURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: session.directoryURL) }
+        try FileManager.default.copyItem(at: movieURL, to: session.screenURL)
+        for url in [session.directoryURL, movieURL] {
+            let model = RecordingStudioModel(url: url)
+            await model.load()
+            precondition(model.isLoaded)
+            let imageDefaults = config.annotationBackgroundSettings
+            precondition(model.style.background == imageDefaults.style
+                         && model.style.padding == imageDefaults.padding
+                         && model.style.cornerRadius == imageDefaults.cornerRadius
+                         && model.style.shadow == imageDefaults.shadow,
+                         "New videos and images must share General's default look, including Reset Defaults")
+            model.style.background = .solid(.black)
+            precondition(AppPreferences.defaultBeautifierConfig == config,
+                         "Project edits must not overwrite General defaults")
+            model.teardown()
+        }
+        session.removeDraftDocument()
+        let savedStyle = RecordingStudioStyle(background: .solid(.white), padding: 0.03,
+                                               cornerRadius: 0.01, shadow: 0.2)
+        try session.writeEditDocument(RecordingEditDocument(style: savedStyle, zoomEnabled: false,
+            zoomCues: [], clipTimeline: .full(sourceDuration: 2)))
+        let reopened = RecordingStudioModel(url: session.directoryURL)
+        await reopened.load()
+        precondition(reopened.style == savedStyle, "Saved projects keep their own look")
+        reopened.teardown()
+    }
+    print("PASS General defaults for new recordings/imports, image look parity, reset, and saved project preservation")
+}
+
+/// Exercises real native dialogs without starting a capture or accessing microphone/camera.
+@MainActor
+private func checkRecordingConfirmations() {
+    let manager = ScreenRecordingManager.shared
+    let presenter = RecordingBarPresenter.shared
+    let previousState = manager.state
+    let previousAppearance = NSApp.appearance
+    defer {
+        manager.state = previousState
+        NSApp.appearance = previousAppearance
+        presenter.hide()
+    }
+    for state in [ScreenRecordingState.idle, .starting, .finishing] {
+        manager.state = state
+        presenter.confirmRecordingAction(.discardRecording)
+        presenter.confirmRecordingAction(.restartRecording)
+        precondition(NSApp.modalWindow == nil, "Inactive/settling recordings must not open a destructive confirmation")
+    }
+    for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+        NSApp.appearance = NSAppearance(named: appearance)
+        for action in [ShortcutService.Action.discardRecording, .restartRecording] {
+            manager.state = action == .discardRecording ? .recording : .paused
+            let state = manager.state
+            presenter.showRecording(displayID: nil)
+            let bar = NSApp.windows.first { $0.identifier?.rawValue == "BetterShot.RecordingBar" }!
+            var observed = false
+            let timer = Timer(timeInterval: 0.1, repeats: false) { _ in
+                MainActor.assumeIsolated {
+                    guard let alertWindow = NSApp.modalWindow else { preconditionFailure("Missing native recording confirmation") }
+                    observed = true
+                    precondition(alertWindow !== bar && alertWindow.sheetParent == nil && bar.attachedSheet == nil,
+                                 "Recording confirmations must be standalone, not sheets on the transparent bar")
+                    precondition(!bar.isOpaque && bar.backgroundColor == .clear)
+                    precondition(alertWindow.sharingType == (PreviewWindowCaptureExclusion.includesAppWindowsInCaptures ? .readOnly : .none))
+                    presenter.confirmRecordingAction(action)
+                    precondition(NSApp.modalWindow === alertWindow, "Repeated shortcuts must not nest confirmations")
+                    NSApp.stopModal(withCode: .alertFirstButtonReturn) // Cancel is the safe default.
+                }
+            }
+            RunLoop.main.add(timer, forMode: .modalPanel)
+            presenter.confirmRecordingAction(action)
+            timer.invalidate()
+            precondition(observed && manager.state == state, "Cancel must preserve recording/paused state")
+            precondition(NSApp.modalWindow == nil && bar.attachedSheet == nil)
+        }
+    }
+    print("PASS standalone native recording confirmations, cancellation, duplicate protection, capture exclusion, and both appearances")
+}
+
+/// Static layout checks need no camera/microphone access or encoded video fixture.
+@MainActor
+func checkCaptureControlsUI() throws {
+    try checkScrollCaptureStitching()
+    let sources = RecordingSourceCatalog.shared
+    precondition(!sources.containsSelection(.fullscreen, displayID: nil, windowID: nil))
+    precondition(!sources.containsSelection(.window, displayID: nil, windowID: nil),
+                 "Recording requires an explicit available source; opening setup must never start capture")
+    let output = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent(".build/editor-snapshots")
+    try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+    for scheme in [ColorScheme.light, .dark] {
+        let name = scheme == .light ? "light" : "dark"
+        try snapshot(PreferencesView(selection: .capture), scheme: scheme, width: 780,
+                     to: output.appendingPathComponent("capture-settings-\(name).png"), height: 740)
+        if ProcessInfo.processInfo.environment["BETTERSHOT_CHECK_CAPTURE_UI"] == "1" {
+            try snapshot(MenuBarContentView(dismissPopover: {}), scheme: scheme, width: 296,
+                         to: output.appendingPathComponent("capture-menu-\(name).png"), height: 540)
+            let hudWidth = ScrollCaptureSessionView.size.width
+            let hudHeight = ScrollCaptureSessionView.size.height
+            let scrollModel = ScrollCaptureSessionModel()
+            try snapshot(ScrollCaptureSessionView(model: scrollModel,
+                stop: {}, cancel: {}), scheme: scheme, width: hudWidth,
+                to: output.appendingPathComponent("scroll-session-starting-\(name).png"), height: hudHeight)
+            scrollModel.isStarting = false
+            scrollModel.pointSize = CGSize(width: 1_512, height: 12_480)
+            try snapshot(ScrollCaptureSessionView(model: scrollModel,
+                stop: {}, cancel: {}), scheme: scheme, width: hudWidth,
+                to: output.appendingPathComponent("scroll-session-capturing-\(name).png"), height: hudHeight)
+            scrollModel.isAutoScrolling = true
+            try snapshot(ScrollCaptureSessionView(model: scrollModel,
+                stop: {}, cancel: {}), scheme: scheme, width: hudWidth,
+                to: output.appendingPathComponent("scroll-session-auto-\(name).png"), height: hudHeight)
+            scrollModel.isAutoScrolling = false
+            scrollModel.statusMessage = "Allow Accessibility in Settings, then retry Auto Scroll."
+            try snapshot(ScrollCaptureSessionView(model: scrollModel,
+                stop: {}, cancel: {}), scheme: scheme, width: hudWidth,
+                to: output.appendingPathComponent("scroll-session-permission-\(name).png"), height: hudHeight)
+        }
+        try snapshot(RecordingSessionControls().studioGlass(cornerRadius: BarMetrics.cornerRadius, opacity: 0.78),
+                     scheme: scheme, width: 360,
+                     to: output.appendingPathComponent("recording-\(name).png"), height: 64)
+        try snapshot(RecordingOptionsView(), scheme: scheme, width: 680,
+                     to: output.appendingPathComponent("recording-setup-\(name).png"), height: 180)
+        try snapshot(RecordingPickerControls().padding(.horizontal, BarMetrics.horizontalPadding)
+            .frame(height: BarMetrics.height).studioGlass(cornerRadius: BarMetrics.cornerRadius, opacity: 0.78)
+            .background(EditorChrome.workspace), scheme: scheme, width: 760,
+                     to: output.appendingPathComponent("capture-\(name).png"), height: 100)
+    }
+    print("PASS scrolling capture menu entry, missing recording source rejection, and capture/setup/transport light and dark layouts")
+}
+
+/// Exercises the production strip merger with synthetic frames, without live screen capture.
+@MainActor
+private func checkScrollCaptureStitching() throws {
+    // MacShot's analyzer must respect row padding and RGB channel order.
+    func paddedFrame(changed: Bool, littleEndian: Bool, scrollbarOnly: Bool = false, padding: UInt8 = 17) -> CGImage {
+        let width = 80, height = 60, rowBytes = width * 4 + 28
+        var bytes = [UInt8](repeating: padding, count: rowBytes * height)
+        for y in 0..<height {
+            for x in 0..<width {
+                let offset = y * rowBytes + x * 4
+                let rgb: [UInt8] = changed && ((!scrollbarOnly && y >= 18) || x >= 74) ? [140, 180, 220] : [40, 80, 120]
+                let pixel = littleEndian ? [rgb[2], rgb[1], rgb[0], 255] : [255, rgb[0], rgb[1], rgb[2]]
+                bytes.replaceSubrange(offset..<offset + 4, with: pixel)
+            }
+        }
+        let order: CGBitmapInfo = littleEndian ? .byteOrder32Little : .byteOrder32Big
+        return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
+            bytesPerRow: rowBytes, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue | order.rawValue),
+            provider: CGDataProvider(data: Data(bytes) as CFData)!, decode: nil,
+            shouldInterpolate: false, intent: .defaultIntent)!
+    }
+    let padded = paddedFrame(changed: false, littleEndian: true)
+    precondition(ScrollFrameAnalyzer.frozenTopRows(current: paddedFrame(changed: false, littleEndian: false),
+        previous: padded, rightMarginPx: 0) == 60)
+    precondition(ScrollFrameAnalyzer.frozenTopRows(current: paddedFrame(changed: true, littleEndian: false),
+        previous: padded, rightMarginPx: 6) == 18)
+    precondition(ScrollFrameAnalyzer.scrollbarWidth(current: paddedFrame(changed: true,
+        littleEndian: false, scrollbarOnly: true), previous: padded) == 6)
+    for shift: CGFloat in [.nan, .infinity, -.infinity, 60, -60] {
+        precondition(ScrollFrameAnalyzer.validatedVerticalShift(shift, frameHeight: 60) == nil)
+    }
+    let screenFrame = CGRect(x: -1512, y: -200, width: 1512, height: 982)
+    let visibleFrame = screenFrame.insetBy(dx: 0, dy: 40)
+    let panel = ScrollCaptureSessionPresenter.panelFrame(size: ScrollCaptureSessionView.size,
+        selection: screenFrame, screenFrame: screenFrame, visibleFrame: visibleFrame, topInset: 38)
+    precondition(visibleFrame.contains(panel) && panel.maxY <= screenFrame.maxY - 38,
+        "Full-height selections must keep Stop/Auto Scroll visible, including on secondary displays")
+
+    func solidFrame(width: Int, height: Int, color: CGColor) -> CGImage {
+        let context = CGContext(data: nil, width: width, height: height,
+            bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        context.setFillColor(color)
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()!
+    }
+
+    let existing = solidFrame(width: 12, height: 6, color: CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+    let current = solidFrame(width: 12, height: 8, color: CGColor(red: 0, green: 0, blue: 1, alpha: 1))
+    guard let merged = ScrollCaptureController.mergedImage(
+        existing: existing, currentFrame: current, offsetPx: 3, headerHeight: 2
+    ), let overwritten = ScrollCaptureController.mergedImage(
+        existing: existing, currentFrame: current, offsetPx: 3
+    ) else { preconditionFailure("Valid scroll strips should merge") }
+    precondition(merged.width == 12 && merged.height == 9 && overwritten.height == 9,
+                 "Each scroll strip should add only the newly exposed three rows")
+
+    func pixelCounts(_ image: CGImage) -> (red: Int, blue: Int) {
+        let bitmap = NSBitmapImageRep(cgImage: image)
+        var redPixels = 0
+        var bluePixels = 0
+        for y in 0..<bitmap.pixelsHigh {
+            for x in 0..<bitmap.pixelsWide {
+                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+                if color.redComponent > 0.8 && color.blueComponent < 0.2 { redPixels += 1 }
+                if color.blueComponent > 0.8 && color.redComponent < 0.2 { bluePixels += 1 }
+            }
+        }
+        return (redPixels, bluePixels)
+    }
+    let counts = pixelCounts(merged)
+    precondition(counts.red == 12 * 3 && counts.blue == 12 * 6,
+                 "Below a pinned header the newer frame should replace the overlap so faded-in content is kept settled")
+    let overwrittenCounts = pixelCounts(overwritten)
+    precondition(overwrittenCounts.red == 12 * 1 && overwrittenCounts.blue == 12 * 8,
+                 "Without a header the newest frame replaces the overlap so pinned footers appear once")
+    guard let refreshed = ScrollCaptureController.mergedImage(
+        existing: overwritten, currentFrame: solidFrame(width: 12, height: 8,
+            color: CGColor(red: 1, green: 0, blue: 0, alpha: 1)), offsetPx: 0, headerHeight: 2
+    ), refreshed.height == 9 else { preconditionFailure("The final frame should refresh the page end in place") }
+    let refreshedCounts = pixelCounts(refreshed)
+    precondition(refreshedCounts.red == 12 * 7 && refreshedCounts.blue == 12 * 2,
+                 "A zero-offset final frame should redraw only the rows below the pinned header")
+
+    // Each row has a distinct color and text-like bars, so repeated or omitted
+    // rows at a seam cannot hide inside a solid-color fixture.
+    let width = 96
+    let viewportHeight = 80
+    let headerHeight = 10
+    let documentHeight = 180
+    let colorSpace = CGColorSpaceCreateDeviceRGB()
+    func bitmap(_ height: Int) -> CGContext {
+        CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
+            bytesPerRow: 0, space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    }
+    let pageContext = bitmap(documentHeight)
+    for row in 0..<documentHeight {
+        let color = CGColor(red: CGFloat((row * 37 + 17) % 256) / 255,
+            green: CGFloat((row * 71 + 31) % 256) / 255,
+            blue: CGFloat((row * 113 + 47) % 256) / 255, alpha: 1)
+        pageContext.setFillColor(color)
+        pageContext.fill(CGRect(x: 0, y: documentHeight - row - 1, width: width, height: 1))
+        pageContext.setFillColor(CGColor(gray: row.isMultiple(of: 2) ? 0.1 : 0.9, alpha: 1))
+        pageContext.fill(CGRect(x: 5 + row % 7, y: documentHeight - row - 1,
+            width: 12 + row % 29, height: 1))
+    }
+    let page = pageContext.makeImage()!
+    func frame(at row: Int) -> CGImage {
+        let content = page.cropping(to: CGRect(x: 0, y: row,
+            width: width, height: viewportHeight))!
+        let context = bitmap(viewportHeight)
+        context.draw(content, in: CGRect(x: 0, y: 0, width: width, height: viewportHeight))
+        context.setFillColor(CGColor(red: 0.12, green: 0.16, blue: 0.2, alpha: 1))
+        context.fill(CGRect(x: 0, y: viewportHeight - headerHeight,
+            width: width, height: headerHeight))
+        context.setFillColor(CGColor(gray: 0.85, alpha: 1))
+        context.fill(CGRect(x: 8, y: viewportHeight - 6, width: 37, height: 2))
+        return context.makeImage()!
+    }
+    let first = frame(at: 0)
+    let second = frame(at: 23)
+    let third = frame(at: 49)
+    // Sparse text on a dark page resembles a conversation capture: most of
+    // the viewport is unchanged background, with a stationary top bar.
+    let darkWidth = 256
+    let darkHeight = 160
+    let darkHeader = 14
+    func darkBitmap(_ height: Int) -> CGContext {
+        CGContext(data: nil, width: darkWidth, height: height, bitsPerComponent: 8,
+            bytesPerRow: 0, space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    }
+    let darkPageContext = darkBitmap(480)
+    darkPageContext.setFillColor(CGColor(red: 0.08, green: 0.08, blue: 0.09, alpha: 1))
+    darkPageContext.fill(CGRect(x: 0, y: 0, width: darkWidth, height: 480))
+    for line in 0..<38 {
+        let top = 8 + line * 12 + line % 3
+        let barColor = line.isMultiple(of: 4)
+            ? CGColor(red: 0.86, green: 0.42, blue: 0.19, alpha: 1)
+            : CGColor(gray: 0.76, alpha: 1)
+        darkPageContext.setFillColor(barColor)
+        darkPageContext.fill(CGRect(x: 12 + line % 9, y: 480 - top - 2,
+            width: 28 + (line * 17) % 150, height: 2))
+    }
+    let darkPage = darkPageContext.makeImage()!
+    func darkFrame(at row: Int) -> CGImage {
+        let context = darkBitmap(darkHeight)
+        context.draw(darkPage.cropping(to: CGRect(x: 0, y: row,
+            width: darkWidth, height: darkHeight))!,
+            in: CGRect(x: 0, y: 0, width: darkWidth, height: darkHeight))
+        context.setFillColor(CGColor(gray: 0.17, alpha: 1))
+        context.fill(CGRect(x: 0, y: darkHeight - darkHeader,
+            width: darkWidth, height: darkHeader))
+        return context.makeImage()!
+    }
+    let darkFirst = darkFrame(at: 0)
+    let darkSecond = darkFrame(at: 42)
+    precondition(ScrollCaptureController.visionScrollOffset(previous: darkFirst,
+        current: darkSecond, excludedTop: darkHeader, excludedRight: 0) == 42,
+        "MacShot's Vision registration must align sparse dark content")
+    precondition(ScrollCaptureController.visionScrollOffset(previous: darkSecond,
+        current: darkFirst, excludedTop: darkHeader, excludedRight: 0) == -42,
+        "Scrolling back must report a negative shift so it is never appended")
+
+    func plainFrame(at row: Int) -> CGImage {
+        page.cropping(to: CGRect(x: 0, y: row, width: width, height: viewportHeight))!
+    }
+    guard let plainJoined = ScrollCaptureController.mergedImage(existing: plainFrame(at: 0),
+        currentFrame: plainFrame(at: 23), offsetPx: 23),
+          let plainStitched = ScrollCaptureController.mergedImage(existing: plainJoined,
+        currentFrame: plainFrame(at: 49), offsetPx: 26),
+          let joined = ScrollCaptureController.mergedImage(existing: first,
+        currentFrame: second, offsetPx: 23, headerHeight: headerHeight),
+          let stitched = ScrollCaptureController.mergedImage(existing: joined,
+        currentFrame: third, offsetPx: 26, headerHeight: headerHeight) else {
+        preconditionFailure("Overlapping page frames should stitch")
+    }
+    let plainExpected = NSBitmapImageRep(cgImage: page.cropping(to:
+        CGRect(x: 0, y: 0, width: width, height: viewportHeight + 49))!)
+    let plainActual = NSBitmapImageRep(cgImage: plainStitched)
+    precondition(plainStitched.width == width && plainStitched.height == viewportHeight + 49)
+    for y in 0..<plainStitched.height {
+        for x in 0..<width {
+            precondition(plainActual.colorAt(x: x, y: y) == plainExpected.colorAt(x: x, y: y),
+                "Header-free stitch changed a page pixel at (\(x), \(y)); check the seams")
+        }
+    }
+    let expectedContext = bitmap(viewportHeight + 49)
+    let expectedContent = page.cropping(to: CGRect(x: 0, y: 0,
+        width: width, height: viewportHeight + 49))!
+    expectedContext.draw(expectedContent, in: CGRect(x: 0, y: 0,
+        width: width, height: viewportHeight + 49))
+    expectedContext.draw(first.cropping(to: CGRect(x: 0, y: 0,
+        width: width, height: headerHeight))!,
+        in: CGRect(x: 0, y: viewportHeight + 49 - headerHeight,
+            width: width, height: headerHeight))
+    let expected = NSBitmapImageRep(cgImage: expectedContext.makeImage()!)
+    let actual = NSBitmapImageRep(cgImage: stitched)
+    precondition(stitched.width == width && stitched.height == viewportHeight + 49)
+    for y in 0..<stitched.height {
+        for x in 0..<width {
+            precondition(actual.colorAt(x: x, y: y) == expected.colorAt(x: x, y: y),
+                "Stitch changed a page pixel at (\(x), \(y)); check the seams")
+        }
+    }
+    print("PASS scroll capture Vision alignment, header and header-free merges, and ordered stitched rows")
+}
+
+@MainActor
+func snapshot<V: View>(
+    _ view: V, scheme: ColorScheme, width: CGFloat, to url: URL, height: CGFloat = 800,
+    interact: () -> Void = {}
+) throws {
+    let app = NSApplication.shared
+    app.appearance = NSAppearance(named: scheme == .light ? .aqua : .darkAqua)
+    let hosting = NSHostingView(rootView: view
+        .environment(\.colorScheme, scheme)
+        .background(EditorChrome.workspace)
+        .frame(width: width, height: height))
+    hosting.appearance = app.appearance
+    hosting.frame = NSRect(x: 0, y: 0, width: width, height: height)
+    let window = NSWindow(contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.appearance = app.appearance
+    window.contentView = hosting
+    defer { window.contentView = nil; window.close() }
+    hosting.layoutSubtreeIfNeeded()
+    interact()
+    hosting.layoutSubtreeIfNeeded()
+    window.displayIfNeeded()
+    guard let bitmap = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+        preconditionFailure("Editor failed to render")
+    }
+    hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+    precondition(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)
+    try bitmap.representation(using: .png, properties: [:])!.write(to: url)
+}
+
+@MainActor
+private func checkTransferToastPresentation(movieURL: URL) {
+    guard let screen = NSScreen.main else { preconditionFailure("Toast checks require a display") }
+    let owner = NSWindow(contentRect: CGRect(x: screen.visibleFrame.minX + 20,
+        y: screen.visibleFrame.minY + 20, width: 400, height: 240),
+        styleMask: [.titled], backing: .buffered, defer: false)
+    owner.isReleasedWhenClosed = false
+    owner.contentView = NSView(frame: CGRect(x: 0, y: 0, width: 400, height: 240))
+    owner.orderFrontRegardless()
+    defer { owner.close() }
+    let anchor = TransferToastAnchorView(frame: .zero)
+    owner.contentView!.addSubview(anchor)
+    let previousKeyWindow = NSApp.keyWindow
+    anchor.update(card: TransferStatusCard(status: .working(stage: .exporting, progress: 0.2)))
+    guard let toast = NSApp.windows.first(where: {
+        $0.identifier?.rawValue == "BetterShot.TransferToast" && $0.isVisible
+    }) else { preconditionFailure("Transfer feedback must appear in its own native window") }
+    precondition(toast !== owner && toast.parent == nil)
+    precondition(toast.appearance === owner.appearance,
+                 "System appearance must remain automatic when the editor has no override")
+    precondition(abs(toast.frame.midX - screen.visibleFrame.midX) < 1
+                 && abs(toast.frame.maxY - (screen.visibleFrame.maxY - 12)) < 1,
+                 "Transfer toast must use the screen's top-center toast position")
+    precondition(!owner.frame.intersects(toast.frame), "Compact editor must not contain the transfer card")
+    precondition(NSApp.keyWindow === previousKeyWindow, "Showing progress must preserve keyboard focus")
+    anchor.update(card: TransferStatusCard(status: .exported(url: movieURL)))
+    precondition(toast.isVisible, "Completion must update the existing panel")
+    for name in [NSAppearance.Name.aqua, .darkAqua] {
+        owner.appearance = NSAppearance(named: name)
+        anchor.update(card: TransferStatusCard(status: .failed(
+            headline: "Export failed", message: "Retry the export.", canRetry: true)))
+        precondition(toast.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == name)
+    }
+    anchor.update(card: nil)
+    precondition(!toast.isVisible, "Dismissal must remove the floating card")
+    anchor.update(card: TransferStatusCard(status: .working(stage: .exporting, progress: nil)))
+    owner.close()
+    precondition(!NSApp.windows.contains(where: {
+        $0.identifier?.rawValue == "BetterShot.TransferToast" && $0.isVisible
+    }), "Closing the editor must clean up its transfer panel")
+    anchor.removeFromSuperview()
+    print("PASS external transfer toast placement, progress/completion, focus, appearances, dismissal, and close cleanup")
+}
+
+
+@MainActor
+private func checkLibraryWindowToolbars(items: [MediaGalleryItem]) async throws {
+    for section in SettingsSection.allCases {
+        precondition(NSImage(systemSymbolName: section.icon, accessibilityDescription: nil) != nil,
+                     "Settings icons must exist in the system SF Symbols catalog")
+    }
+    let live = ProcessInfo.processInfo.environment["BETTERSHOT_CHECK_LIBRARY_WINDOWS"] == "1"
+    let activationPolicy = NSApp.activationPolicy()
+    defer { if live { NSApp.setActivationPolicy(activationPolicy) } }
+    if live {
+        precondition(CGPreflightScreenCaptureAccess(), "Live window checks require existing Screen Recording access")
+        NSApp.setActivationPolicy(.regular)
+    }
+    for scheme in [ColorScheme.light, .dark] {
+        for width: CGFloat in live ? [780, 1080] : [780] {
+            for (name, root) in [
+                ("gallery", AnyView(MediaGalleryContent(items: items))),
+                ("gallery-list", AnyView(MediaGalleryContent(items: items, listView: true))),
+                ("settings", AnyView(PreferencesView()))
+            ] {
+                let window = NSWindow(contentViewController: NSHostingController(rootView: root.environment(\.colorScheme, scheme)))
+                window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
+                window.title = name == "settings" ? SettingsSection.general.title : MediaGalleryCategory.all.title
+                window.styleMask = [.titled, .closable, .resizable, .fullSizeContentView]
+                window.toolbarStyle = .unified
+                window.titlebarAppearsTransparent = true
+                window.collectionBehavior = [.moveToActiveSpace]
+                window.setContentSize(NSSize(width: width, height: 660))
+                window.isReleasedWhenClosed = false
+                defer { window.contentViewController = nil; window.close() }
+                window.contentView?.layoutSubtreeIfNeeded()
+                try await Task.sleep(for: .milliseconds(100))
+                precondition(window.toolbar?.items.contains(where: { $0.label == "Toggle Sidebar" }) == true,
+                             "Gallery and Settings must provide the native sidebar toggle")
+                // cacheDisplay cannot capture macOS's compositor-backed sidebar/search surfaces.
+                // Check the real window rather than mistaking white offscreen placeholders for UI.
+                if live {
+                    window.center()
+                    window.orderFrontRegardless()
+                    window.makeKeyAndOrderFront(nil)
+                    NSApp.activate(ignoringOtherApps: true)
+                    try await Task.sleep(for: .milliseconds(400))
+                    let path = ".build/editor-snapshots/\(name)-window-\(scheme)-\(Int(width)).png"
+                    for attempt in 0..<2 {
+                        let capture = Process()
+                        capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+                        capture.arguments = ["-x", "-o", "-l", String(window.windowNumber), path]
+                        try capture.run()
+                        capture.waitUntilExit()
+                        if capture.terminationStatus == 0 { break }
+                        precondition(attempt == 0, "Could not capture displayed \(name) window")
+                        // WindowServer can need another turn after changing spaces or appearance.
+                        window.orderFrontRegardless()
+                        try await Task.sleep(for: .milliseconds(500))
+                    }
+                    let bitmap = NSBitmapImageRep(data: try Data(contentsOf: URL(fileURLWithPath: path)))!
+                    if scheme == .dark {
+                        let color = bitmap.colorAt(x: bitmap.pixelsWide / 10, y: bitmap.pixelsHigh * 3 / 4)!.usingColorSpace(.deviceRGB)!
+                        precondition(max(color.redComponent, color.greenComponent, color.blueComponent) < 0.8,
+                                     "Displayed dark sidebars must not render as white blocks")
+                    }
+                    func clickSidebarToggle() {
+                        let button = window.toolbar!.items.first { $0.label == "Toggle Sidebar" }!.view!
+                        let point = button.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil)
+                        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                            window.sendEvent(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
+                                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!)
+                        }
+                    }
+                    func splitView(in view: NSView) -> NSSplitView? {
+                        (view as? NSSplitView) ?? view.subviews.lazy.compactMap { splitView(in: $0) }.first
+                    }
+                    let split = splitView(in: window.contentView!)!
+                    let sidebar = split.arrangedSubviews[0]
+                    precondition(!split.isSubviewCollapsed(sidebar))
+                    clickSidebarToggle()
+                    try await Task.sleep(for: .milliseconds(300))
+                    precondition(split.isSubviewCollapsed(sidebar), "Sidebar button must hide the sidebar")
+                    clickSidebarToggle()
+                    try await Task.sleep(for: .milliseconds(300))
+                    precondition(!split.isSubviewCollapsed(sidebar), "Sidebar button must restore the sidebar")
+                }
+            }
+        }
+    }
+    print("PASS native gallery/Settings sidebar toolbars in both appearances" + (live ? ", displayed compact/wide snapshots and dark material rendering" : ""))
+}
+
+@MainActor
+private func checkMediaGallery(imageURL: URL, movieURL: URL) async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let history = HistoryStore(storageDirectory: root.appendingPathComponent("history"))
+    let raw = history.referenceCapture(at: imageURL)!
+    let session = RecordingSession(directoryURL: root.appendingPathComponent("Demo.bettershotrec", isDirectory: true))
+    try FileManager.default.createDirectory(at: session.directoryURL, withIntermediateDirectories: true)
+    try FileManager.default.copyItem(at: movieURL, to: session.screenURL)
+    history.referenceCapture(at: session.screenURL, kind: .recording)
+    let project = RecordingProjectSummary(session: session, displayName: "Demo", createdAt: Date(),
+        duration: 2, pixelSize: CGSize(width: 1920, height: 1080), isSaved: false,
+        hasUnsavedDraft: true, sizeOnDisk: 0, lastOpenedAt: nil)
+    let image = ScreenshotHistoryItem(id: UUID(), createdAt: Date(), updatedAt: Date(),
+        fileName: UUID().uuidString + ".png", pixelWidth: 1920, pixelHeight: 1080,
+        cloudURL: "https://example.com/s/image", hasEdits: true, sourceCapturePath: imageURL.path)
+    let video = ScreenshotHistoryItem(id: UUID(), createdAt: Date(), updatedAt: Date(),
+        fileName: "Demo.mov", pixelWidth: 1920, pixelHeight: 1080, kind: .video,
+        cloudURL: "https://example.com/s/video", recordingSessionPath: session.directoryURL.path)
+    let entries = MediaGalleryItem.collect(history: history, edits: [image, video], projects: [project])
+    precondition(MediaGalleryCategory.all.kind == nil)
+    precondition(MediaGalleryCategory.screenshots.kind == .screenshot)
+    precondition(MediaGalleryCategory.videos.kind == .recording)
+    precondition(entries.count == 2, "Capture, edited history, and package must not duplicate media")
+    precondition(entries.first { $0.kind == .recording }!.editorURL == session.directoryURL,
+                 "Videos must reopen their editable project")
+    precondition(entries.first { $0.kind == .screenshot }!.localURL == imageURL,
+                 "A missing shared copy must not hide an available original")
+    precondition(!entries.contains { $0.id == raw.id.uuidString })
+    let recovered = MediaGalleryItem.collect(history: HistoryStore(storageDirectory: root.appendingPathComponent("empty")),
+        edits: [], projects: [project])
+    precondition(recovered.count == 1 && recovered[0].editorURL == session.directoryURL,
+                 "Projects outside recent history must remain discoverable")
+    precondition(MediaGalleryItem.filtered(entries, kind: .recording, cloud: false, search: " demo ").count == 1)
+    precondition(MediaGalleryItem.filtered(entries, kind: .screenshot, cloud: true, search: "").count == 1)
+    precondition(MediaGalleryItem.filtered(entries, kind: nil, cloud: true, search: "no match").isEmpty)
+    precondition(ScreenshotHistoryStore.shouldKeep(image), "Missing files must retain cloud links on reload")
+    var missing = image
+    missing.cloudURL = nil
+    precondition(ScreenshotHistoryStore.shouldKeep(missing), "An available original must preserve its editor history")
+    missing.sourceCapturePath = nil
+    precondition(!ScreenshotHistoryStore.shouldKeep(missing))
+    for value in ["file:///tmp/file", "javascript:alert(1)", "https://", "not a link"] {
+        precondition(MediaGalleryItem.cloudLink(value) == nil)
+    }
+    let cloudOnly = MediaGalleryItem(id: "cloud-only", title: "Cloud screenshot", createdAt: Date(),
+        kind: .screenshot, localURL: root.appendingPathComponent("missing.png"),
+        editorURL: root.appendingPathComponent("missing.png"), cloudURL: URL(string: "https://example.com/s/missing"))
+    precondition(cloudOnly.open(cloud: false) != nil, "A missing local file must report an actionable opening error")
+    precondition(MediaGalleryItem.filtered([cloudOnly], kind: nil, cloud: false, search: "").isEmpty)
+    precondition(MediaGalleryItem.filtered([cloudOnly], kind: nil, cloud: true, search: "").count == 1)
+    let localImage = MediaGalleryItem(id: "local-image", title: "Local screenshot", createdAt: Date(),
+        kind: .screenshot, localURL: imageURL, editorURL: imageURL)
+    let localVideo = MediaGalleryItem(id: "local-video", title: "Local video", createdAt: Date(),
+        kind: .recording, localURL: movieURL, editorURL: movieURL)
+    let cloudVideo = MediaGalleryItem(id: "cloud-video", title: "Cloud video", createdAt: Date(),
+        kind: .recording, localURL: root.appendingPathComponent("missing.mp4"),
+        editorURL: root.appendingPathComponent("missing.mp4"), cloudURL: URL(string: "https://example.com/s/missing-video"))
+    let classified = entries + [localImage, localVideo, cloudOnly, cloudVideo]
+    for category in MediaGalleryCategory.allCases {
+        let matches = MediaGalleryItem.filtered(classified, kind: category.kind, cloud: category.cloud, search: "")
+        precondition(matches.count == (category.kind == nil ? 4 : 2), "Each local/cloud and image/video sidebar filter must classify independently")
+        precondition(matches.allSatisfy { category.cloud ? $0.cloudURL != nil : $0.hasLocalFile })
+    }
+    for ext in ["MOV", "mp4", "m4v", "avi"] {
+        let legacy = ScreenshotHistoryItem(id: UUID(), createdAt: Date(), updatedAt: Date(),
+            fileName: "Legacy.\(ext)", pixelWidth: 1920, pixelHeight: 1080,
+            cloudURL: "https://example.com/s/legacy")
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(legacy)) as! [String: Any]
+        for storedKind in [nil, "image"] as [String?] {
+            json["kind"] = storedKind
+            let decoded = try JSONDecoder().decode(ScreenshotHistoryItem.self, from: JSONSerialization.data(withJSONObject: json))
+            precondition(decoded.kind == .video && decoded.isVideo, "Legacy videos must not default to screenshots")
+            let recovered = MediaGalleryItem.collect(history: HistoryStore(storageDirectory: root.appendingPathComponent("empty")), edits: [decoded], projects: [])
+            precondition(MediaGalleryItem.filtered(recovered, kind: .recording, cloud: true, search: "").count == 1)
+            precondition(PreviewOverlay.isVideo(URL(fileURLWithPath: "Legacy.\(ext)")))
+        }
+    }
+    let inferredHistory = HistoryStore(storageDirectory: root.appendingPathComponent("inferred"))
+    precondition(inferredHistory.referenceCapture(at: movieURL)?.kind == .recording)
+    precondition(inferredHistory.importCapture(from: movieURL, deleteSource: false)?.kind == .recording)
+    let staleRecord = CaptureRecord(filename: movieURL.lastPathComponent, pixelWidth: 1920, pixelHeight: 1080,
+        sourcePath: movieURL.path)
+    try JSONEncoder().encode([staleRecord]).write(to: root.appendingPathComponent("inferred/history.json"))
+    precondition(HistoryStore(storageDirectory: root.appendingPathComponent("inferred")).records.first?.kind == .recording)
+    precondition(HistoryStore.decodeThumbnail(.init(url: movieURL, kind: .screenshot)) != nil,
+                 "Video thumbnail decoding must recover stale image metadata")
+    try FileManager.default.copyItem(at: movieURL, to: session.finalURL)
+    precondition(RecordingSession.sessionDirectory(containing: session.finalURL) == session.directoryURL)
+    precondition(RecordingSession.sessionDirectory(containing: session.cameraURL) == nil)
+    let rendered = MediaGalleryItem.collect(history: history, edits: [video], projects: [project]).first { $0.kind == .recording }!
+    precondition(rendered.previewURL == session.finalURL)
+    try FileManager.default.removeItem(at: session.finalURL)
+    precondition(rendered.hasLocalFile && rendered.previewURL == session.screenURL,
+                 "Invalidating a flattened video must keep the local recording available")
+    for item in entries {
+        precondition(HistoryStore.decodeThumbnail(.init(url: item.localURL, kind: item.kind), maxSize: 480) != nil,
+                     "Both screenshot and video gallery sources must decode")
+    }
+    let output = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent(".build/editor-snapshots")
+    try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+    let configuration = ProcessInfo.processInfo.environment["BETTERSHOT_BUILD_CONFIGURATION"] ?? "Debug"
+    let galleryBundle = Bundle(url: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent("\(ProcessInfo.processInfo.environment["BETTERSHOT_DERIVED_DATA"] ?? ".build/tests")/Build/Products/\(configuration)/BetterShot.app"))!
+    let previousIcon = NSApp.applicationIconImage
+    NSApp.applicationIconImage = galleryBundle.image(forResource: "AppIcon")
+    defer { NSApp.applicationIconImage = previousIcon }
+    var snapshotItems = entries
+    for sample in OnboardingSample.allCases {
+        let url = sample.sourceURL(in: galleryBundle)!
+        snapshotItems.append(MediaGalleryItem(id: url.path, title: url.deletingPathExtension().lastPathComponent,
+            createdAt: Date(timeIntervalSince1970: 1788958800), kind: .screenshot,
+            localURL: url, editorURL: url, cloudURL: nil))
+    }
+    for scheme in [ColorScheme.light, .dark] {
+        for width: CGFloat in [780, 1080] {
+            NSApplication.shared.appearance = NSAppearance(named: scheme == .light ? .aqua : .darkAqua)
+            let hosting = NSHostingView(rootView: MediaGalleryContent(items: snapshotItems)
+                .environment(\.colorScheme, scheme).background(EditorChrome.workspace)
+                .frame(width: width, height: 680))
+            hosting.appearance = NSApplication.shared.appearance
+            let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: width, height: 680),
+                styleMask: [.borderless], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.appearance = NSAppearance(named: scheme == .light ? .aqua : .darkAqua)
+            window.contentView = hosting
+            defer { window.contentView = nil; window.close() }
+            hosting.layoutSubtreeIfNeeded()
+            // Yield the main actor so the real card tasks can decode their thumbnails.
+            try await Task.sleep(for: .milliseconds(300))
+            hosting.layoutSubtreeIfNeeded()
+            let bitmap = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds)!
+            hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+            try bitmap.representation(using: .png, properties: [:])!.write(
+                to: output.appendingPathComponent("gallery-\(scheme)-\(Int(width)).png"))
+        }
+        for category in [MediaGalleryCategory.videos, .cloudScreenshots, .cloudVideos] {
+            try snapshot(MediaGalleryContent(items: classified, category: category), scheme: scheme, width: 780,
+                to: output.appendingPathComponent("gallery-\(category.rawValue)-\(scheme).png"), height: 620)
+        }
+        try snapshot(MediaGalleryContent(items: snapshotItems, listView: true), scheme: scheme, width: 780,
+            to: output.appendingPathComponent("gallery-list-\(scheme).png"), height: 520)
+        try snapshot(MediaGalleryCard(item: snapshotItems[0], cloud: false, selected: true), scheme: scheme, width: 148,
+            to: output.appendingPathComponent("gallery-selected-\(scheme).png"), height: 160)
+        try snapshot(MediaGalleryCard(item: cloudOnly, cloud: true), scheme: scheme, width: 260,
+            to: output.appendingPathComponent("gallery-cloud-\(scheme).png"), height: 400)
+        try snapshot(MediaGalleryContent(items: []), scheme: scheme, width: 780,
+            to: output.appendingPathComponent("gallery-empty-\(scheme).png"), height: 520)
+    }
+    try await checkLibraryWindowToolbars(items: snapshotItems)
+    try await checkGalleryDeletion(imageURL: imageURL, movieURL: movieURL, root: root)
+    print("PASS gallery source merging, project reopening, local/cloud/type/search filters, missing local shares, and compact/light/dark layouts")
+}
+
+
+@MainActor
+private func checkGalleryDeletion(imageURL: URL, movieURL: URL, root: URL) async throws {
+    let fm = FileManager.default
+    let local = root.appendingPathComponent("local.png")
+    try fm.copyItem(at: imageURL, to: local)
+    let history = HistoryStore(storageDirectory: root.appendingPathComponent("deletion-history"))
+    let record = history.referenceCapture(at: local)!
+    let edits = ScreenshotHistoryStore.shared
+    let saved = edits.importScreenshot(from: local, sourceCapturePath: local.path)
+    let link = ShareBundle.pageURL(id: "test-share", publicBaseURL: "https://cdn.example.com")!
+    await edits.setCloudURL(for: saved, cloudURL: link.absoluteString)
+    let savedItem = edits.items.first { $0.url == saved }!
+    try Data("edits".utf8).write(to: ScreenshotHistoryStore.editDocumentURL(for: saved))
+    try fm.copyItem(at: local, to: ScreenshotHistoryStore.baseImageURL(for: saved))
+    let entry = MediaGalleryItem.collect(history: history, edits: [savedItem], projects: []).first!
+    precondition(entry.captureIDs == [record.id] && entry.historyID == savedItem.id)
+    precondition(MediaGalleryItem.deletionSlug(for: link, publicBaseURL: "https://cdn.example.com") == "test-share")
+    precondition(MediaGalleryItem.deletionSlug(for: link, publicBaseURL: "https://other.example.com") == nil)
+    precondition(MediaGalleryItem.deletionSlug(for: URL(string: "https://example.com/s/other")!, publicBaseURL: "https://cdn.example.com") == nil)
+    let trash = root.appendingPathComponent("trash", isDirectory: true)
+    try fm.createDirectory(at: trash, withIntermediateDirectories: true)
+    let targets = MediaGalleryItem.deletionTargets(entry.deletionURLs)
+    precondition(Set(targets.map(\.path)).count == targets.count)
+    precondition(targets.contains(saved) && targets.contains(local))
+    do {
+        try entry.deleteLocal(history: history, edits: edits) { _ in throw CocoaError(.fileWriteNoPermission) }
+        preconditionFailure("Deletion failures must be reported")
+    } catch {}
+    precondition(fm.fileExists(atPath: saved.path) && fm.fileExists(atPath: local.path))
+    precondition(history.records.contains { $0.id == record.id })
+    precondition(edits.items.contains { $0.id == savedItem.id })
+    try entry.deleteLocal(history: history, edits: edits) { url in
+        try fm.moveItem(at: url, to: trash.appendingPathComponent(UUID().uuidString + "-" + url.lastPathComponent))
+    }
+    precondition(targets.allSatisfy { !fm.fileExists(atPath: $0.path) })
+    precondition(history.records.isEmpty, "Local deletion must clear the matching recent capture")
+    edits.reload()
+    precondition(edits.items.first { $0.id == savedItem.id }?.cloudURL == link.absoluteString,
+                 "Local deletion must preserve the cloud link across reload")
+    try edits.forgetCloudLink(link.absoluteString)
+    precondition(!edits.items.contains { $0.id == savedItem.id }, "Deleting both copies must clear the row")
+
+    let keep = edits.importScreenshot(from: imageURL)
+    await edits.setCloudURL(for: keep, cloudURL: link.absoluteString)
+    try edits.forgetCloudLink(link.absoluteString)
+    precondition(fm.fileExists(atPath: keep.path) && edits.items.contains { $0.url == keep && $0.cloudURL == nil },
+                 "Clearing a cloud share must preserve the local screenshot")
+
+    let session = RecordingSession(directoryURL: root.appendingPathComponent("DeleteVideo.bettershotrec", isDirectory: true))
+    try fm.createDirectory(at: session.directoryURL, withIntermediateDirectories: true)
+    try fm.copyItem(at: movieURL, to: session.screenURL)
+    try Data("pointer".utf8).write(to: session.pointerCaptureURL)
+    let videoRecord = history.referenceCapture(at: session.screenURL, kind: .recording)!
+    let video = MediaGalleryItem.collect(history: history, edits: [], projects: []).first!
+    precondition(video.captureIDs == [videoRecord.id])
+    precondition(MediaGalleryItem.deletionTargets(video.deletionURLs) == [session.directoryURL],
+                 "Delete a recording package as one unit, including its sidecars")
+    try video.deleteLocal(history: history, edits: edits) { url in
+        try fm.moveItem(at: url, to: trash.appendingPathComponent(url.lastPathComponent))
+    }
+    precondition(!fm.fileExists(atPath: session.directoryURL.path) && history.records.isEmpty)
+    print("PASS local deletion failure/retry, source/edit/package cleanup, cloud/local preservation, and cloud origin validation")
+}
+
+@MainActor
+private func checkShortcutCustomization(defaults: UserDefaults) {
+    let service = ShortcutService(defaults: defaults)
+    service.restoreDefaults()
+    let actions = ShortcutService.Action.allCases
+    precondition(Set(actions.map(\.rawValue)).count == actions.count)
+    precondition(Set(actions.compactMap(\.annotationTool)) == Set(AnnotationTool.allCases))
+    for action in actions where action.defaultShortcut == nil {
+        precondition(service.effectiveShortcut(for: action) == nil, "New actions must start unassigned")
+    }
+    for scope in [ShortcutService.Scope.global, .image, .video] {
+        let bindings = actions.filter { $0.scope == scope }.compactMap { service.effectiveShortcut(for: $0) }
+        let keys = bindings.map { "\($0.keyCode):\($0.modifiers)" }
+        precondition(Set(keys).count == keys.count, "Defaults must not conflict within a scope")
+    }
+    precondition(service.effectiveShortcut(for: .previousRegion) == .defaultPreviousRegion)
+    for taken in [false, true] {
+        let suiteName = "BetterShot-previous-region-" + UUID().uuidString
+        let migrationDefaults = UserDefaults(suiteName: suiteName)!
+        defer { migrationDefaults.removePersistentDomain(forName: suiteName) }
+        if taken, let data = try? JSONEncoder().encode(ShortcutService.Shortcut.defaultPreviousRegion) {
+            migrationDefaults.set(data, forKey: "bs_hotkey_\(ShortcutService.Action.window.rawValue)")
+        }
+        let migrated = ShortcutService(defaults: migrationDefaults)
+        precondition(migrated.effectiveShortcut(for: .previousRegion) == (taken ? nil : .defaultPreviousRegion),
+                     "A custom ⌘⇧1 binding on another action must keep working")
+    }
+    let custom = ShortcutService.Shortcut(keyCode: UInt32(kVK_ANSI_9), modifiers: UInt32(cmdKey | optionKey), enabled: true)
+    precondition(service.validationError(for: custom, action: .window) == nil)
+    service.saveShortcut(custom, for: .window)
+    precondition(service.action(keyCode: custom.keyCode, modifiers: custom.modifiers, scope: .global) == .window)
+    precondition(service.validationError(for: custom, action: .region) != nil)
+    precondition(service.validationError(for: custom, action: .imageFreehand) == nil, "Editors have independent scopes")
+    precondition(ShortcutService(defaults: defaults).effectiveShortcut(for: .window) == custom)
+    var disabled = custom
+    disabled.enabled = false
+    service.saveShortcut(disabled, for: .window)
+    precondition(service.effectiveShortcut(for: .window) == nil)
+    precondition(ShortcutService(defaults: defaults).loadShortcut(for: .window) == disabled)
+    precondition(service.action(keyCode: custom.keyCode, modifiers: custom.modifiers, scope: .global) == nil)
+    precondition(service.validationError(for: .init(keyCode: UInt32(kVK_ANSI_D), modifiers: 0, enabled: true), action: .region) != nil)
+    precondition(service.validationError(for: .init(keyCode: UInt32(kVK_ANSI_D), modifiers: 0, enabled: true), action: .imageFreehand) == nil)
+    service.saveShortcut(custom, for: .imageRectangle)
+    precondition(service.action(keyCode: UInt32(kVK_ANSI_R), modifiers: 0, scope: .image) == nil)
+    precondition(service.action(keyCode: custom.keyCode, modifiers: custom.modifiers, scope: .image) == .imageRectangle)
+    service.resetShortcut(for: .imageRectangle)
+    precondition(service.action(keyCode: UInt32(kVK_ANSI_R), modifiers: 0, scope: .image) == .imageRectangle)
+    precondition(service.action(keyCode: UInt32(kVK_ForwardDelete), modifiers: 0, scope: .image) == .imageDelete)
+    service.saveShortcut(custom, for: .imageDelete)
+    precondition(service.action(keyCode: UInt32(kVK_ForwardDelete), modifiers: 0, scope: .image) == nil)
+    service.restoreDefaults()
+    precondition(service.loadShortcut(for: .window) == nil)
+    precondition(service.effectiveShortcut(for: .imageDelete) == ShortcutService.Action.imageDelete.defaultShortcut)
+    let window = ShortcutTestWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100),
+                          styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    let handler = EditorShortcutHandlerView()
+    handler.service = service
+    window.contentView = handler
+    var fired: [ShortcutService.Action] = []
+    handler.perform = { fired.append($0); return true }
+    func key(_ code: Int, _ modifiers: NSEvent.ModifierFlags = []) -> NSEvent {
+        NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers,
+            timestamp: 0, windowNumber: window.windowNumber, context: nil,
+            characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: UInt16(code))!
+    }
+    precondition(handler.handle(key(kVK_ANSI_R)))
+    precondition(fired == [.imageRectangle])
+    let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 40))
+    handler.addSubview(textView)
+    window.makeFirstResponder(textView)
+    precondition(!handler.handle(key(kVK_ANSI_R)), "Typing R must not select Rectangle")
+    precondition(!handler.handle(key(kVK_ANSI_C, .command)), "Copy in text fields stays native")
+    precondition(!handler.handle(key(kVK_ANSI_Z, .command)), "Text undo stays native")
+    precondition(handler.handle(key(kVK_ANSI_S, .command)), "Save remains available while typing")
+    service.beginRecordingShortcut()
+    precondition(!handler.handle(key(kVK_ANSI_S, .command)), "Recording a shortcut must not run it")
+    service.endRecordingShortcut()
+    window.simulatesKeyWindow = false
+    precondition(!handler.handle(key(kVK_ANSI_R)), "Inactive editor windows must ignore shortcuts")
+    window.close()
+    for dock in [false, true] {
+        for menuBar in [false, true] {
+            defaults.set(dock, forKey: AppPreferences.showInDockKey)
+            defaults.set(menuBar, forKey: AppPreferences.showInMenuBarKey)
+            let visibility = AppPreferences.visibility(defaults: defaults)
+            precondition(visibility.dock == dock)
+            precondition(visibility.menuBar == (menuBar || !dock))
+            precondition(visibility.dock || visibility.menuBar)
+        }
+    }
+    print("PASS \(actions.count) shortcut actions, unassigned additions, scope conflicts, persistence, disable/reset, alternate keys, and app visibility safety")
+}
+
+/// Exercise the production focus gates without activating a real editor window.
+private final class ShortcutTestWindow: NSWindow {
+    var simulatesKeyWindow = true
+    override var isKeyWindow: Bool { simulatesKeyWindow }
+}
+
+@MainActor
+private func checkPreviewOverlay(imageURL: URL) async throws {
+    let defaults = UserDefaults.standard
+    let keys = ["bs_overlayPosition", "bs_overlayCardSize", "bs_overlayEdgeMargin",
+                "bs_overlayDismissDelay", AppPreferences.overlayAlwaysShowActionsKey, AppPreferences.overlayToolLayoutKey]
+    let saved = keys.map { defaults.object(forKey: $0) }
+    let overlay = PreviewOverlay.shared
+    defer {
+        overlay.dismiss()
+        for (key, value) in zip(keys, saved) {
+            if let value { defaults.set(value, forKey: key) }
+            else { defaults.removeObject(forKey: key) }
+        }
+        overlay.refreshSettings()
+    }
+    AppPreferences.overlayDismissDelay = 0.05
+    AppPreferences.overlayCardSize = .medium
+    overlay.show(url: imageURL)
+    let panel = NSApp.windows.first { $0.identifier?.rawValue == "BetterShot.CaptureOverlay" }!
+    precondition(panel.canBecomeKey && !panel.canBecomeMain, "Overlay actions must support native keyboard focus")
+    let originalWidth = panel.frame.width
+    AppPreferences.overlayCardSize = .large
+    overlay.refreshSettings()
+    precondition(panel.frame.width > originalWidth, "Changing Overlay settings must resize an existing overlay")
+    precondition(!R2CredentialStore.shared.isConfigured, "Tests must not access R2 credentials")
+    overlay.share(imageURL)
+    guard case .failed(_, _, true) = overlay.transferStatus(for: imageURL) else {
+        preconditionFailure("An unconfigured share must offer recovery")
+    }
+    overlay.refreshSettings()
+    try await Task.sleep(for: .milliseconds(100))
+    precondition(overlay.items.contains(imageURL), "A sharing error must survive automatic dismissal and settings changes")
+    overlay.share(imageURL)
+    precondition(overlay.items.count == 1, "Retry must retain the same card")
+    overlay.dismissShareStatus(for: imageURL)
+    precondition(overlay.items.contains(imageURL) && overlay.transferStatus(for: imageURL) == nil,
+                 "Dismissing a sharing failure returns to the capture without deleting it")
+    overlay.share(imageURL)
+    overlay.remove(imageURL)
+    precondition(overlay.items.isEmpty && overlay.transferStatus(for: imageURL) == nil)
+    precondition(overlay.toastURL == nil, "Removing a preview clears its transfer toast")
+    overlay.share(imageURL)
+    precondition(overlay.items.contains(imageURL), "Sharing a removed capture presents its card again")
+    guard case .failed(_, _, true) = overlay.transferStatus(for: imageURL) else {
+        preconditionFailure("A re-presented unconfigured share must offer recovery")
+    }
+    overlay.remove(imageURL)
+
+    let id = UUID()
+    let cancelledUpload = Task {
+        try await CloudUploader.shared.upload(itemID: id, fileURL: imageURL, named: "cancelled")
+    }
+    cancelledUpload.cancel()
+    do {
+        _ = try await cancelledUpload.value
+        preconditionFailure("Cancelled preparation must not upload")
+    } catch is CancellationError { }
+    precondition(R2Uploader.shared.failedItems[id] == nil && R2Uploader.shared.uploadProgress[id] == nil,
+                 "Cancelled preparation must never enter the R2 uploader")
+
+    AppPreferences.overlayDismissDelay = 0.15
+    overlay.show(url: imageURL)
+    let livePanel = NSApp.windows.first { $0.identifier?.rawValue == "BetterShot.CaptureOverlay" && $0.isVisible }! as! NSPanel
+    precondition(livePanel.becomesKeyOnlyIfNeeded, "Presenting a preview must not pull focus into it")
+    let mouse = NSEvent.mouseLocation
+    livePanel.setFrameOrigin(NSPoint(x: mouse.x - livePanel.frame.width / 2, y: mouse.y - livePanel.frame.height / 2))
+    try await Task.sleep(for: .milliseconds(350))
+    precondition(overlay.items.contains(imageURL), "Live pointer over the panel pauses dismissal")
+    let activationPolicy = NSApp.activationPolicy()
+    defer { NSApp.setActivationPolicy(activationPolicy) }
+    NSApp.setActivationPolicy(.regular)
+    NSApp.activate(ignoringOtherApps: true)
+    livePanel.makeKey()
+    try await Task.sleep(for: .milliseconds(150))
+    precondition(livePanel.isKeyWindow, "Focus test requires a key preview panel")
+    livePanel.setFrameOrigin(NSPoint(x: mouse.x + 40, y: mouse.y + 40))
+    overlay.setActionFocused(true, for: imageURL)
+    try await Task.sleep(for: .milliseconds(350))
+    precondition(overlay.items.contains(imageURL), "A focused tool keeps its card available")
+    let otherWindow = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 160, height: 100),
+                               styleMask: [.titled], backing: .buffered, defer: false)
+    otherWindow.isReleasedWhenClosed = false
+    defer { otherWindow.close() }
+    otherWindow.makeKeyAndOrderFront(nil) // Deliberately leave the tool focus flag set.
+    precondition(!livePanel.isKeyWindow, "Moving keyboard focus must leave the preview panel")
+    try await Task.sleep(for: .milliseconds(350))
+    precondition(!overlay.items.contains(imageURL), "Leaving the panel resumes dismissal without a focus-exit callback")
+    precondition(FileManager.default.fileExists(atPath: imageURL.path), "Timer dismissal preserves retained files")
+    AppPreferences.overlayDismissDelay = AppPreferences.overlayDismissNever
+    overlay.show(url: imageURL)
+    try await Task.sleep(for: .milliseconds(250))
+    precondition(overlay.items.contains(imageURL), "Never disables automatic dismissal")
+    overlay.remove(imageURL)
+    print("PASS visible preview pointer pause, tool focus, stale focus recovery, and Never")
+
+    AppPreferences.resetOverlaySettings()
+    precondition(AppPreferences.overlayPosition == .bottomRight && AppPreferences.overlayCardSize == .small)
+    precondition(AppPreferences.overlayDismissDelay == 5 && AppPreferences.overlayEdgeMargin == 20)
+    precondition(!defaults.bool(forKey: AppPreferences.overlayAlwaysShowActionsKey))
+    defaults.set(true, forKey: AppPreferences.overlayAlwaysShowActionsKey)
+    let output = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appendingPathComponent(".build/editor-snapshots", isDirectory: true)
+    try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+    for scheme in [ColorScheme.light, .dark] {
+        let name = scheme == .light ? "light" : "dark"
+        let bundle = Bundle(url: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("\(ProcessInfo.processInfo.environment["BETTERSHOT_DERIVED_DATA"] ?? ".build/tests")/Build/Products/\(ProcessInfo.processInfo.environment["BETTERSHOT_BUILD_CONFIGURATION"] ?? "Debug")/BetterShot.app"))!
+        try snapshot(OverlaySettingsTab(resourceBundle: bundle), scheme: scheme,
+                     width: 540, to: output.appendingPathComponent("overlay-settings-\(name).png"), height: 1050)
+        try snapshot(PreferencesView(selection: .overlay), scheme: scheme, width: 780,
+                     to: output.appendingPathComponent("overlay-settings-compact-\(name).png"), height: 620)
+        for preset in [OverlayLayoutPreset.standard, .sharing, .minimal] {
+            try snapshot(OverlayLayoutEditor(layout: .constant(preset.layout!), resourceBundle: bundle),
+                         scheme: scheme, width: 298,
+                         to: output.appendingPathComponent("overlay-layout-\(preset.rawValue)-\(name).png"), height: 228)
+        }
+        for size in OverlayCardSize.allCases {
+            AppPreferences.overlayCardSize = size
+            AppPreferences.overlayPosition = .bottomLeft
+            overlay.refreshSettings()
+            precondition(overlay.cardSize == size && overlay.position == .bottomLeft)
+            precondition(overlay.panelSize.width == size.panelSize(margin: AppPreferences.overlayEdgeMargin).width)
+            let statuses: [TransferStatus] = [
+                .working(stage: .processing, progress: nil),
+                .working(stage: .uploading, progress: 0.42),
+                .linkReady(url: URL(string: "https://example.com/s/a-long-capture-link")!),
+                .failed(headline: "Upload failed", message: "Check your connection and try again.", canRetry: true)
+            ]
+            try snapshot(HStack(spacing: 16) {
+                PreviewCardView(overlay: overlay, url: imageURL, thumbnail: NSImage(contentsOf: imageURL))
+                ForEach(statuses.indices, id: \.self) { index in
+                    TransferStatusCard(status: statuses[index], compactSize: size.thumbnailSize)
+                }
+            }.padding(24), scheme: scheme, width: size.thumbnailSize.width * 5 + 112,
+                to: output.appendingPathComponent("overlay-\(size.rawValue)-\(name).png"),
+                height: size.thumbnailSize.height + 48)
+        }
+    }
+    AppPreferences.overlayCardSize = .small
+    overlay.refreshSettings()
+    for preset in [OverlayLayoutPreset.standard, .sharing, .minimal] {
+        AppPreferences.overlayToolLayout = preset.layout!
+        try snapshot(PreviewCardView(overlay: overlay, url: imageURL, thumbnail: NSImage(contentsOf: imageURL)),
+                     scheme: .dark, width: 178,
+                     to: output.appendingPathComponent("overlay-runtime-\(preset.rawValue).png"), height: 146)
+    }
+    AppPreferences.resetOverlaySettings()
+    precondition(AppPreferences.overlayToolLayout == .standard)
+    print("PASS overlay configuration/reset, share recovery/retention, cancelled preparation, and small/medium/large light/dark snapshots")
+}
+
+@MainActor
+private func checkColorPickerAndToast() async throws {
+    let pasteboard = NSPasteboard.withUniqueName()
+    let oldSound = AppPreferences.playSound
+    AppPreferences.playSound = false
+    defer { pasteboard.releaseGlobally(); AppPreferences.playSound = oldSound }
+    let capture = CaptureOrchestrator.shared
+    capture.completeTextCapture("First line\nSecond line", action: .ocr, pasteboard: pasteboard)
+    precondition(pasteboard.string(forType: .string) == "First line\nSecond line")
+    capture.completeTextCapture("First line\nSecond line", action: .ocrSingleLine, pasteboard: pasteboard)
+    precondition(pasteboard.string(forType: .string) == "First line Second line")
+    capture.completeTextCapture("#FF8000", action: .colorPicker, pasteboard: pasteboard)
+    capture.completeTextCapture(" \n", action: .ocr, pasteboard: pasteboard)
+    precondition(pasteboard.string(forType: .string) == "#FF8000", "Empty OCR preserves the clipboard")
+    let samples: [(NSColor, String)] = [
+        (.black, "#000000"), (.white, "#FFFFFF"),
+        (NSColor(srgbRed: 1, green: 0.5, blue: 0, alpha: 1), "#FF8000"),
+        (NSColor(white: 0.5, alpha: 1), "#808080"),
+        (NSColor(displayP3Red: 1, green: 0, blue: 0, alpha: 1), "#FF0000"),
+        (NSColor(srgbRed: -0.2, green: 1.3, blue: 0.5, alpha: 1), "#00FF80")
+    ]
+    for (color, expected) in samples {
+        let hex = try ColorPickerOverlay.hexFromColor(color)
+        precondition(hex == expected, "Color picker must produce clamped six-digit sRGB hex")
+    }
+    do {
+        _ = try ColorPickerOverlay.hexFromColor(NSColor(patternImage: NSImage(size: CGSize(width: 8, height: 8))))
+        preconditionFailure("Non-RGB colors must fail safely")
+    } catch ColorPickerOverlay.PickError.unsupportedColor { }
+    guard let screen = NSScreen.main else { preconditionFailure("Toast checks require a display") }
+    let previousKeyWindow = NSApp.keyWindow
+    defer { ToastWindow.shared.dismiss(animated: false) }
+    for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+        ToastWindow.shared.show(title: "Copied", message: "#FF8000 copied to clipboard", systemIcon: "eyedropper", duration: 10, on: screen)
+        let panel = NSApp.windows.first { $0.identifier?.rawValue == "BetterShot.Toast" && $0.isVisible }!
+        panel.appearance = NSAppearance(named: appearance)
+        let size = panel.frame.size
+        precondition(size.width > 100 && size.width <= 360 && size.height > 30 && size.height < 150, "Unexpected toast size: \(size)")
+        for _ in 0..<5 {
+            panel.updateConstraintsIfNeeded()
+            panel.displayIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+            precondition(panel.frame.size == size, "Color-copy toast sizing must remain stable across display cycles")
+        }
+        precondition(NSApp.keyWindow === previousKeyWindow, "Color-copy feedback must preserve browser keyboard focus")
+        ToastWindow.shared.dismiss(animated: false)
+        precondition(!panel.isVisible)
+    }
+    print("PASS color picker sRGB/P3/grayscale conversion, safe unsupported colors, and stable native toast lifecycle")
+}
+
+
+/// Displays production editor views and exercises AppKit events, not offscreen snapshots.
+@MainActor
+private func checkEditorWindowInteractions(imageURL: URL, movieURL: URL) async throws {
+    let defaults = UserDefaults.standard
+    let keys = [AppPreferences.editorOpensFullScreenKey, AppPreferences.showInDockKey,
+                AppPreferences.showInMenuBarKey, "bs_openEditorAfterCapture", "bs_copyAfterSave",
+                "bs_selfTimerDelay", AfterCaptureAction.save.storageKey(for: .screenshot),
+                BetterShotPreferences.recordingCameraDeviceIDKey]
+    let savedPreferences = keys.map { defaults.object(forKey: $0) }
+    let previousApp = NSWorkspace.shared.frontmostApplication
+    let policy = NSApp.activationPolicy()
+    let presenter = PreviewPanelPresenter.shared
+    let oldAnnotate = presenter.onAnnotate
+    let oldVideo = presenter.onEditVideo
+    let tray = MenuBarPopoverController.shared
+    var editor: NSWindow?
+    defer {
+        editor?.contentViewController = nil
+        editor?.close()
+        tray.closePopover()
+        tray.setVisible(false)
+        RecordingBarPresenter.shared.dismiss()
+        PreviewOverlay.shared.clearAll()
+        presenter.onAnnotate = oldAnnotate
+        presenter.onEditVideo = oldVideo
+        for (key, value) in zip(keys, savedPreferences) { defaults.set(value, forKey: key) }
+        NSApp.setActivationPolicy(policy)
+        previousApp?.activate()
+    }
+    defaults.set(false, forKey: AppPreferences.showInDockKey)
+    defaults.set(true, forKey: AppPreferences.showInMenuBarKey)
+    defaults.set(false, forKey: "bs_openEditorAfterCapture")
+    defaults.set(false, forKey: "bs_copyAfterSave")
+    defaults.set(0, forKey: "bs_selfTimerDelay")
+    defaults.set(false, forKey: AfterCaptureAction.save.storageKey(for: .screenshot))
+    defaults.set("", forKey: BetterShotPreferences.recordingCameraDeviceIDKey)
+    AppActivationPolicy.applyVisibility()
+    func open(_ content: AnyView) {
+        let window = NSWindow(contentViewController: NSHostingController(rootView: content))
+        window.styleMask = [.titled, .closable, .resizable, .miniaturizable]
+        window.isReleasedWhenClosed = false
+        window.setContentSize(NSSize(width: 1100, height: 760))
+        window.center()
+        editor = window
+        window.makeKeyAndOrderFront(nil)
+    }
+    presenter.onAnnotate = { open(AnyView(AnnotationEditorWindow(url: .constant($0)))) }
+    presenter.onEditVideo = { open(AnyView(RecordingStudioWindow(url: .constant($0)))) }
+    for source in [imageURL, movieURL] {
+        for automatic in [false, true] {
+            defaults.set(automatic, forKey: AppPreferences.editorOpensFullScreenKey)
+            PreviewOverlay.shared.show(url: source)
+            PreviewOverlay.shared.openAnnotateEditor(for: source)
+            try await Task.sleep(for: .seconds(2))
+            let window = editor!
+            precondition(NSApp.isActive && window.isKeyWindow, "Opening from the overlay must focus the editor")
+            precondition(window.collectionBehavior.contains(.fullScreenPrimary))
+            precondition(window.styleMask.contains(.fullScreen) == automatic,
+                         "Editors honor the automatic full-screen preference")
+            if !automatic {
+                window.toggleFullScreen(nil)
+                try await Task.sleep(for: .seconds(2))
+                precondition(window.styleMask.contains(.fullScreen), "Manual full screen works with the default disabled")
+            }
+            let probe = EditorClickProbe(frame: NSRect(x: 10, y: 10, width: 20, height: 20))
+            window.contentView!.addSubview(probe)
+            tray.openPopover()
+            let panel = NSApp.windows.first { $0.identifier?.rawValue == "BetterShot.MenuBar" && $0.isVisible }!
+            precondition(tray.isOpen)
+            let point = probe.convert(NSPoint(x: 10, y: 10), to: nil)
+            NSApp.sendEvent(NSEvent.mouseEvent(with: .leftMouseDown, location: point, modifierFlags: [],
+                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!)
+            precondition(!tray.isOpen && !panel.isVisible && probe.clicks == 1,
+                         "An editor click dismisses the tray immediately and still reaches the editor")
+            probe.removeFromSuperview()
+            tray.openPopover()
+            NSApp.sendEvent(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}",
+                isARepeat: false, keyCode: 53)!)
+            precondition(!tray.isOpen, "Escape dismisses the tray")
+            tray.openPopover()
+            RecordingBarPresenter.shared.showPicker(recordingOptions: true)
+            precondition(!tray.isOpen && RecordingBarPresenter.shared.showsRecordingOptions,
+                         "Recording options close the tray while an editor is full screen")
+            await RecordingBarPresenter.shared.hidePickerForCapture()
+            tray.openPopover()
+            if CGPreflightScreenCaptureAccess() {
+                let previous = CaptureOrchestrator.shared.lastCaptureURL
+                await CaptureOrchestrator.shared.performCapture(.fullscreen, on: window.screen)
+                precondition(!tray.isOpen && CaptureOrchestrator.shared.lastCaptureURL != previous,
+                             "Screenshot capture completes from the tray with a full-screen editor open")
+            } else {
+                await RecordingBarPresenter.shared.hidePickerForCapture()
+                precondition(!tray.isOpen)
+                print("SKIP real screenshot capture: Screen Recording permission is unavailable")
+            }
+            PreviewOverlay.shared.clearAll()
+            window.toggleFullScreen(nil)
+            try await Task.sleep(for: .seconds(2))
+            precondition(!window.styleMask.contains(.fullScreen), "Editors can leave full screen")
+            window.contentViewController = nil
+            window.close()
+            editor = nil
+        }
+    }
+    print("PASS native image/video editor activation, automatic/manual full screen, tray dismissal/click-through/Escape, and capture handoff")
+}
+
+private final class EditorClickProbe: NSView {
+    var clicks = 0
+    override func mouseDown(with event: NSEvent) { clicks += 1 }
+}

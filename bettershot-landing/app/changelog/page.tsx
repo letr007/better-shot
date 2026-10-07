@@ -1,84 +1,128 @@
-import Image from "next/image"
-import Link from "next/link"
+import type { Metadata } from "next"
 import { getChangelog } from "@/lib/changelog"
+import { MarkdownText } from "@/components/markdown-text"
+import { SiteNav } from "@/components/site-nav"
+import { SiteFooter } from "@/components/site-footer"
 
-export const metadata = {
-  title: "Changelog — Better Shot",
-  description: "What's new in Better Shot. Release notes for every version.",
+export const metadata: Metadata = {
+  title: "Changelog | Better Shot for macOS",
+  description:
+    "Every release of Better Shot, the free open source alternative to Loom and CleanShot X for macOS. New features, changes, and fixes, version by version.",
+  alternates: { canonical: "/changelog" },
+  openGraph: {
+    title: "Changelog | Better Shot for macOS",
+    description: "New features, changes, and fixes in every version of Better Shot.",
+    url: "https://bettershot.site/changelog",
+    type: "website",
+  },
+}
+
+function anchor(version: string) {
+  return `v${version.replace(/\./g, "-")}`
 }
 
 export default function ChangelogPage() {
   const changelog = getChangelog()
 
   return (
-    <div className="min-h-screen w-full bg-[#fafaf9] text-[#111] selection:bg-[#e78a53]/20">
-      <nav className="fixed top-0 inset-x-0 z-50 h-14 backdrop-blur-xl bg-[#fafaf9]/80">
-        <div className="max-w-[960px] mx-auto h-full px-6 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5">
-            <Image src="/logo.png" alt="" width={22} height={22} className="rounded-[5px]" />
-            <span className="text-[13px] font-medium tracking-[-0.01em] text-[#111]/50">
-              Better Shot
-            </span>
-          </Link>
-        </div>
-      </nav>
+    <div className="min-h-screen w-full bg-white text-zinc-900">
+      <SiteNav />
 
-      <main className="pt-14">
-        <section className="max-w-[640px] mx-auto px-6 pt-24 pb-28">
-          <h1 className="text-[28px] font-semibold tracking-[-0.02em] text-[#111] mb-2">
-            Changelog
-          </h1>
-          <p className="text-[14px] text-[#111]/30 mb-14">
-            What&apos;s new in every release of Better Shot.
-          </p>
+      <main id="main">
+        <div className="mx-auto max-w-[680px] px-6">
+          <header className="pb-10 pt-28 sm:pt-36">
+            <h1 className="text-[clamp(2rem,5vw,3rem)] leading-[1.1] tracking-tight">
+              Changelog
+            </h1>
+            <p className="mt-3 text-[17px] leading-relaxed text-zinc-400">
+              We ship when it is ready.
+            </p>
+            <div className="mt-5">
+              <a
+                href="https://x.com/bettershotsite"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-1.5 text-[13px] text-zinc-500 transition-colors hover:border-zinc-400 hover:text-zinc-900"
+              >
+                <svg viewBox="0 0 24 24" className="size-3.5 fill-current" aria-hidden>
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                </svg>
+                Follow for updates
+              </a>
+            </div>
+          </header>
 
-          <div className="space-y-10">
-            {changelog.map((ver) => (
-              <div key={ver.version}>
-                <div className="flex items-baseline justify-between mb-4 pb-3 border-b border-[#111]/[0.06]">
-                  <span className="text-[13px] font-semibold text-[#111]/60 tracking-[-0.01em]">
-                    v{ver.version}
-                  </span>
-                  <span className="text-[11px] text-[#111]/25 font-mono">{ver.date}</span>
-                </div>
-                <div className="space-y-5">
-                  {ver.sections.map((section) => (
-                    <div key={section.label}>
-                      <p className="text-[11px] font-medium text-[#111]/30 uppercase tracking-wide mb-2">
-                        {section.label}
-                      </p>
-                      <ul className="space-y-1.5">
-                        {section.items.map((item, i) => (
-                          <li key={i} className="flex items-start gap-2.5">
-                            <span className="mt-[7px] h-1 w-1 rounded-full bg-[#111]/15 shrink-0" />
-                            <span className="text-[13px] leading-[1.6] text-[#111]/35">{item}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+          <div className="space-y-0">
+            {changelog.map((version) => {
+              let labelShown = false
+              return (
+              <section
+                key={version.version}
+                id={anchor(version.version)}
+                className="scroll-mt-20"
+              >
+                {version.sections.map((section) =>
+                  section.items.map((item, itemIndex) => {
+                    const match = item.match(/^\*\*(.+?)\*\*\s*[:.]?\s*(.*)$/)
+                    const title = match ? match[1] : item
+                    const detail = match ? match[2] : ""
+                    const showLabel = !labelShown
+                    if (showLabel) labelShown = true
+
+                    return (
+                      <div
+                        key={`${version.version}-${section.label}-${itemIndex}`}
+                        className="grid gap-x-10 border-t border-zinc-100 py-6 sm:grid-cols-[120px_minmax(0,1fr)]"
+                      >
+                        <div className="mb-2 sm:mb-0 sm:pt-0.5">
+                          {showLabel && (
+                            <>
+                              <p className="text-[13px] font-medium tabular-nums text-zinc-900">
+                                v{version.version}
+                              </p>
+                              <p className="text-[12px] tabular-nums text-zinc-400">
+                                {version.date.toUpperCase()}
+                              </p>
+                            </>
+                          )}
+                        </div>
+                        <div>
+                          <h3 className="text-[15px] font-medium leading-[26px] text-zinc-900">
+                            {title}
+                          </h3>
+                          {detail && (
+                            <p className="mt-1.5 text-[15px] leading-[26px] text-zinc-500">
+                              <MarkdownText>{detail}</MarkdownText>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  }),
+                )}
+              </section>
+              )
+            })}
           </div>
-        </section>
+
+          <div className="border-t border-zinc-100 py-10">
+            <p className="text-[14px] text-zinc-400">
+              Full release notes on{" "}
+              <a
+                href="https://github.com/KartikLabhshetwar/better-shot/releases"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-brand-700 underline underline-offset-2 transition-colors hover:text-brand"
+              >
+                GitHub Releases
+              </a>
+              .
+            </p>
+          </div>
+        </div>
       </main>
 
-      <footer className="border-t border-[#111]/[0.04]">
-        <div className="max-w-[960px] mx-auto px-6 py-6 flex items-center justify-between">
-          <p className="text-[11px] text-[#111]/15">
-            &copy; {new Date().getFullYear()} Better Shot
-          </p>
-          <nav className="flex items-center gap-5">
-            <Link
-              href="/"
-              className="text-[11px] text-[#111]/15 hover:text-[#111]/40 transition-colors"
-            >
-              Home
-            </Link>
-          </nav>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   )
 }
