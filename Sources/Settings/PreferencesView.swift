@@ -80,10 +80,10 @@ struct PreferencesView: View {
                     }
                     Section("Settings") {
                         ForEach(SettingsSection.preferenceGroup.filter {
-                            search.isEmpty || $0.title.localizedStandardContains(search)
+                            search.isEmpty || L10n.string($0.title).localizedStandardContains(search)
                         }, content: row)
                         if !search.isEmpty && !SettingsSection.preferenceGroup.contains(where: {
-                            $0.title.localizedStandardContains(search)
+                            L10n.string($0.title).localizedStandardContains(search)
                         }) {
                             Text("No matching sections").font(.callout).foregroundStyle(.secondary)
                         }
@@ -110,7 +110,7 @@ struct PreferencesView: View {
                 .frame(maxWidth: 720)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color(nsColor: .windowBackgroundColor))
-                .navigationTitle(selection.title)
+                .navigationTitle(L10n.string(selection.title))
         }
         .navigationSplitViewStyle(.balanced)
         .onChange(of: selection) { _, section in onSelectionChange(section) }
@@ -121,7 +121,7 @@ struct PreferencesView: View {
 
     private func row(_ section: SettingsSection) -> some View {
         Label {
-            Text(section.title).foregroundStyle(.primary)
+            Text(L10n.string(section.title)).foregroundStyle(.primary)
         } icon: {
             Image(systemName: section.icon)
                 .font(.system(size: 15, weight: .regular))
@@ -155,8 +155,8 @@ private struct SettingsSearchField: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSSearchField {
         let field = NSSearchField()
-        field.placeholderString = "Search sections"
-        field.setAccessibilityLabel("Search settings sections")
+        field.placeholderString = L10n.string("Search sections")
+        field.setAccessibilityLabel(L10n.string("Search settings sections"))
         field.delegate = context.coordinator
         return field
     }
@@ -273,7 +273,7 @@ struct GeneralSettingsTab: View {
                 .disabled(!showInDock)
                 Picker("Theme", selection: appAppearance) {
                     ForEach(AppAppearance.allCases) { appearance in
-                        Text(appearance.label).tag(appearance)
+                        Text(L10n.string(appearance.label)).tag(appearance)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -313,9 +313,9 @@ struct GeneralSettingsTab: View {
 
                         Menu {
                             ForEach(ScreenshotFileNaming.menuGroups) { group in
-                                Section(group.title) {
+                                Section(L10n.string(group.title)) {
                                     ForEach(group.items) { item in
-                                        Button(item.title) { fileNameTemplate += item.token }
+                                        Button(L10n.string(item.title)) { fileNameTemplate += item.token }
                                     }
                                 }
                             }
@@ -357,9 +357,9 @@ struct GeneralSettingsTab: View {
             } header: {
                 Text("Saving")
             } footer: {
-                Text(automaticallySaveScreenshots
+                Text(L10n.string(automaticallySaveScreenshots
                     ? "Normal screenshots are saved to this folder immediately. Copying or dismissing the preview keeps the saved file."
-                    : "Screenshots are not automatically saved to this folder. Choose Save or Export when you want a file.")
+                    : "Screenshots are not automatically saved to this folder. Choose Save or Export when you want a file."))
                 Text("Capture & Copy, Edit, and Pin shortcuts bypass automatic saving. The + button adds a date, a random string, or a counter to file names.")
             }
             .onAppear(perform: refreshFileNamePreview)
@@ -378,7 +378,7 @@ struct GeneralSettingsTab: View {
                 .pickerStyle(.segmented)
 
                 if (ExportFormat(rawValue: exportFormatRaw) ?? .png).usesLossyQuality {
-                    InspectorSlider("Quality", value: Binding(
+                    InspectorSlider(L10n.string("Quality"), value: Binding(
                         get: { CGFloat(exportQuality) },
                         set: { exportQuality = (Double($0) * 20).rounded() / 20 }
                     ), range: 0.1...1, format: .percent(step: 0.05))
@@ -402,9 +402,9 @@ struct GeneralSettingsTab: View {
                 DefaultBackgroundPicker(selectedStyle: $defaultConfig.style)
 
                 Group {
-                    InspectorSlider("Padding", value: $defaultConfig.padding, range: 0...0.45, format: .percent())
-                    InspectorSlider("Corner Radius", value: $defaultConfig.cornerRadius, range: 0...0.12, format: .percent(fractionDigits: 1))
-                    InspectorSlider("Shadow", value: $defaultConfig.shadowStrength, range: 0...1, format: .percent())
+                    InspectorSlider(L10n.string("Padding"), value: $defaultConfig.padding, range: 0...0.45, format: .percent())
+                    InspectorSlider(L10n.string("Corner Radius"), value: $defaultConfig.cornerRadius, range: 0...0.12, format: .percent(fractionDigits: 1))
+                    InspectorSlider(L10n.string("Shadow"), value: $defaultConfig.shadowStrength, range: 0...1, format: .percent())
                 }
                 .disabled(defaultConfig.style == .none)
 
@@ -417,7 +417,7 @@ struct GeneralSettingsTab: View {
                 HStack {
                     Text("Default Look")
                     Spacer()
-                    Text(backgroundLabel(for: defaultConfig.style))
+                    Text(L10n.string(backgroundLabel(for: defaultConfig.style)))
                         .foregroundStyle(.secondary)
                         .textCase(.none)
                 }
@@ -432,7 +432,9 @@ struct GeneralSettingsTab: View {
             Section {
                 Picker("Keep the last", selection: $historyRetentionLimit) {
                     ForEach(HistoryRetention.allCases) { retention in
-                        Text(retention.label).tag(retention.rawValue)
+                        Text(retention == .unlimited
+                             ? L10n.string("Unlimited")
+                             : L10n.format("%d captures", retention.rawValue)).tag(retention.rawValue)
                     }
                 }
                 .onChange(of: historyRetentionLimit) { _, _ in
@@ -477,7 +479,7 @@ struct GeneralSettingsTab: View {
             if enabled { try SMAppService.mainApp.register() }
             else { try SMAppService.mainApp.unregister() }
         } catch {
-            loginError = "Couldn’t update Launch at Login. \(error.localizedDescription) Try again or check Login Items in System Settings."
+            loginError = L10n.format("Couldn’t update Launch at Login. %@ Try again or check Login Items in System Settings.", error.localizedDescription)
         }
         refreshLoginStatus()
     }
@@ -495,8 +497,8 @@ struct GeneralSettingsTab: View {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
-        panel.prompt = "Save Here"
-        panel.message = "Choose where BetterShot saves new screenshots and recordings."
+        panel.prompt = L10n.string("Save Here")
+        panel.message = L10n.string("Choose where BetterShot saves new screenshots and recordings.")
         panel.directoryURL = URL(fileURLWithPath: saveDir)
         if panel.runModal() == .OK, let url = panel.url {
             saveDir = url.path
@@ -625,7 +627,8 @@ private struct DefaultBackgroundPicker: View {
                 )
         }
         .buttonStyle(.plain)
-        .help(color.name)
+        .help(L10n.string(color.name))
+        .accessibilityLabel(L10n.string(color.name))
     }
 
     private func gradientButton(_ preset: GradientPreset) -> some View {
@@ -646,7 +649,8 @@ private struct DefaultBackgroundPicker: View {
                 )
         }
         .buttonStyle(.plain)
-        .help(preset.name)
+        .help(L10n.string(preset.name))
+        .accessibilityLabel(L10n.string(preset.name))
     }
 
     private func bundledImageButton(_ asset: BundledBackgrounds.ImageAsset) -> some View {
@@ -718,7 +722,7 @@ private struct DefaultBackgroundPicker: View {
         panel.allowedContentTypes = [.image, .png, .jpeg]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        panel.title = "Choose Background Image"
+        panel.title = L10n.string("Choose Background Image")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         selectedStyle = .wallpaper(WallpaperSource(path: url.path))
     }
@@ -880,12 +884,20 @@ struct CaptureSettingsTab: View {
     @AppStorage("bs_openEditorAfterCapture") private var openEditorAfterCapture = false
     @AppStorage("bs_keepInDeckUntilSaved") private var keepInDeckUntilSaved = false
     @AppStorage("bs_captureRegionOnRelease") private var captureRegionOnRelease = false
+    @AppStorage("bs_regionCaptureMode") private var regionCaptureModeRaw = RegionCaptureMode.frozen.rawValue
     @State private var isConfirmingReset = false
 
     private var selfTimerDelay: Binding<SelfTimerDelay> {
         Binding(
             get: { SelfTimerDelay(rawValue: selfTimerRaw) ?? .off },
             set: { selfTimerRaw = $0.rawValue }
+        )
+    }
+
+    private var regionCaptureMode: Binding<RegionCaptureMode> {
+        Binding(
+            get: { RegionCaptureMode(rawValue: regionCaptureModeRaw) ?? .frozen },
+            set: { regionCaptureModeRaw = $0.rawValue }
         )
     }
 
@@ -910,7 +922,9 @@ struct CaptureSettingsTab: View {
             Section {
                 Picker("Count down before capturing", selection: selfTimerDelay) {
                     ForEach(SelfTimerDelay.allCases, id: \.self) { delay in
-                        Text(delay.label).tag(delay)
+                        Text(delay == .off
+                             ? L10n.string("Off")
+                             : L10n.format("%ds", delay.rawValue)).tag(delay)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -921,6 +935,15 @@ struct CaptureSettingsTab: View {
             }
 
             Section {
+                Picker("Mode", selection: regionCaptureMode) {
+                    ForEach(RegionCaptureMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                Text("Freeze & Select saves the frame shown during selection. Live Selection captures after you confirm.")
+                    .font(.callout).foregroundStyle(.secondary)
+
                 Toggle(isOn: $captureRegionOnRelease) {
                     Text("Capture as soon as I let go")
                     Text("Off, the rectangle stays up with handles so you can nudge it, and Return or a double-click takes the shot.")
@@ -982,6 +1005,7 @@ struct CaptureSettingsTab: View {
                 openEditorAfterCapture = false
                 keepInDeckUntilSaved = false
                 captureRegionOnRelease = false
+                regionCaptureModeRaw = RegionCaptureMode.frozen.rawValue
             }
             Button("Cancel", role: .cancel) {}
         }
@@ -1079,16 +1103,16 @@ struct RecordingSettingsTab: View {
                     get: { exportSettings.effectiveFrameRate },
                     set: { exportSettings.frameRate = $0 }
                 )) {
-                    ForEach(VideoExportFrameRate.allCases) { Text($0.rawValue).tag($0) }
+                    ForEach(VideoExportFrameRate.allCases) { Text(L10n.string($0.rawValue)).tag($0) }
                 }
                 Picker("Render speed", selection: $exportSettings.speed) {
-                    ForEach(VideoCompressionSpeed.allCases) { Text($0.rawValue).tag($0) }
+                    ForEach(VideoCompressionSpeed.allCases) { Text(L10n.string($0.rawValue)).tag($0) }
                 }
                 Picker("Resolution", selection: $exportSettings.resolution) {
-                    ForEach(VideoCompressionResolution.allCases) { Text($0.rawValue).tag($0) }
+                    ForEach(VideoCompressionResolution.allCases) { Text(L10n.string($0.rawValue)).tag($0) }
                 }
                 Picker("Codec", selection: $exportSettings.codec) {
-                    ForEach(VideoCompressionCodec.allCases) { Text($0.rawValue).tag($0) }
+                    ForEach(VideoCompressionCodec.allCases) { Text(L10n.string($0.rawValue)).tag($0) }
                 }
             } header: {
                 Text("Default Video Export")
@@ -1142,7 +1166,7 @@ struct ShortcutSettingsTab: View {
                 Picker("Category", selection: $category) {
                     Text("All Actions").tag(ShortcutService.Group?.none)
                     ForEach(ShortcutService.Group.allCases, id: \.self) { group in
-                        Text(group.title).tag(Optional(group))
+                        Text(L10n.string(group.title)).tag(Optional(group))
                     }
                 }
                 ShortcutPermissionView()
@@ -1152,8 +1176,8 @@ struct ShortcutSettingsTab: View {
             ForEach(ShortcutService.Group.allCases, id: \.self) { group in
                 let actions = ShortcutService.Action.allCases.filter {
                     $0.group == group && (category == nil || category == group)
-                        && (search.isEmpty || $0.title.localizedCaseInsensitiveContains(search)
-                            || group.title.localizedCaseInsensitiveContains(search))
+                        && (search.isEmpty || L10n.string($0.title).localizedCaseInsensitiveContains(search)
+                            || L10n.string(group.title).localizedCaseInsensitiveContains(search))
                 }
                 if !actions.isEmpty {
                     Section {
@@ -1161,11 +1185,11 @@ struct ShortcutSettingsTab: View {
                             ShortcutRow(action: action, recordingAction: $recordingAction)
                         }
                     } header: {
-                        Text(group.title)
+                        Text(L10n.string(group.title))
                     } footer: {
-                        Text(actions.first?.scope == .global
+                        Text(L10n.string(actions.first?.scope == .global
                              ? "Available across macOS. Use Command, Control, or Option with a key."
-                             : "Available in this editor. Single keys work when you are not typing in a text field.")
+                             : "Available in this editor. Single keys work when you are not typing in a text field."))
                     }
                 }
             }
@@ -1203,7 +1227,7 @@ struct ShortcutRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                Text(action.title).frame(maxWidth: .infinity, alignment: .leading)
+                Text(L10n.string(action.title)).frame(maxWidth: .infinity, alignment: .leading)
                 if recordingAction == action {
                     ShortcutRecorderView { keyCode, modifiers in
                         persist(.init(keyCode: keyCode, modifiers: modifiers, enabled: true))
@@ -1218,14 +1242,14 @@ struct ShortcutRow: View {
                         errorMessage = nil
                         recordingAction = action
                     } label: {
-                        Text(shortcut?.displayString ?? "Record Shortcut")
+                        Text(shortcut?.displayString ?? L10n.string("Record Shortcut"))
                             .font(.system(.callout, design: .monospaced))
                             .foregroundStyle(shortcut?.enabled == false ? .secondary : .primary)
                             .frame(width: 124)
                     }
-                    .accessibilityLabel("Record shortcut for \(action.title)")
-                    .accessibilityValue(shortcut?.accessibilityDescription ?? "Unassigned")
-                    Toggle("Enable \(action.title)", isOn: Binding(
+                    .accessibilityLabel(L10n.format("Record shortcut for %@", L10n.string(action.title)))
+                    .accessibilityValue(shortcut?.accessibilityDescription ?? L10n.string("Unassigned"))
+                    Toggle(L10n.format("Enable %@", L10n.string(action.title)), isOn: Binding(
                         get: { shortcut?.enabled ?? false },
                         set: { enabled in
                             guard var updated = shortcut else { return }
@@ -1252,14 +1276,23 @@ struct ShortcutRow: View {
                         Image(systemName: "ellipsis")
                     }
                     .menuStyle(.borderlessButton).fixedSize()
-                    .accessibilityLabel("Options for \(action.title) shortcut")
+                    .accessibilityLabel(L10n.format("Options for %@ shortcut", L10n.string(action.title)))
                 }
             }
             if let errorMessage {
-                Text(errorMessage).font(.callout).foregroundStyle(.red)
+                Text(localizedValidationError(errorMessage)).font(.callout).foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    private func localizedValidationError(_ error: String) -> String {
+        if let conflict = ShortcutService.Action.allCases.first(where: {
+            error == "Already assigned to \($0.title). Clear or change that shortcut first."
+        }) {
+            return L10n.format("Already assigned to %@. Clear or change that shortcut first.", L10n.string(conflict.title))
+        }
+        return L10n.string(error)
     }
 
     private func persist(_ updated: ShortcutService.Shortcut) {
@@ -1353,7 +1386,7 @@ final class ShortcutRecorderNSView: NSView {
         path.lineWidth = 1.5
         path.stroke()
 
-        let text = "Press shortcut..." as NSString
+        let text = L10n.string("Press shortcut...") as NSString
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 11, weight: .medium),
             .foregroundColor: StudioChrome.accentNSColor,
@@ -1442,7 +1475,7 @@ struct AboutTab: View {
                 Text("BetterShot")
                     .font(.title.weight(.semibold))
 
-                Text("Version \(version) (\(build))")
+                Text(L10n.format("Version %@ (%@)", version, build))
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
 
@@ -1455,7 +1488,7 @@ struct AboutTab: View {
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title)
+            Text(L10n.string(title))
                 .font(.headline)
 
             content()
@@ -1479,7 +1512,7 @@ struct AboutTab: View {
 
         case .available(let newVersion, let url):
             VStack(alignment: .leading, spacing: 8) {
-                Label("Version \(newVersion) is available", systemImage: "arrow.down.circle.fill")
+                Label(L10n.format("Version %@ is available", newVersion), systemImage: "arrow.down.circle.fill")
                     .foregroundStyle(.green)
 
                 Button("Download and Install") {
@@ -1491,7 +1524,7 @@ struct AboutTab: View {
         case .downloading(let progress):
             VStack(alignment: .leading, spacing: 8) {
                 ProgressView(value: progress) {
-                    Text("Downloading\u{2026} \(Int(progress * 100))%")
+                    Text(L10n.format("Downloading… %d%%", Int(progress * 100)))
                         .font(.caption)
                 }
                 .frame(maxWidth: 260)
@@ -1502,7 +1535,7 @@ struct AboutTab: View {
 
         case .readyToInstall(let newVersion, let dmgPath):
             VStack(alignment: .leading, spacing: 8) {
-                Label("Version \(newVersion) is ready", systemImage: "checkmark.circle.fill")
+                Label(L10n.format("Version %@ is ready", newVersion), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
 
                 Button("Install and Relaunch") {
@@ -1524,7 +1557,7 @@ struct AboutTab: View {
 
         case .failed(let message):
             VStack(alignment: .leading, spacing: 8) {
-                Label(message, systemImage: "exclamationmark.triangle.fill")
+                Label(L10n.format("Update failed: %@", L10n.string(message)), systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
 

@@ -184,7 +184,7 @@ struct MenuBarContentView: View {
         let update = AppUpdater.shared.latestAvailableVersion
 
         return HStack(spacing: 5) {
-            Text("Version \(version)")
+            Text(L10n.format("Version %@", version))
                 .font(.system(size: 10))
                 .foregroundStyle(.tertiary)
 
@@ -193,7 +193,7 @@ struct MenuBarContentView: View {
                     .font(.system(size: 10))
                     .foregroundStyle(.tertiary)
 
-                Text("\(update) available in Settings")
+                Text(L10n.format("%@ available in Settings", update))
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.tint)
             }
@@ -220,7 +220,7 @@ struct MenuBarContentView: View {
 
         var screenshotItems: [TrayMenuItem] = []
         if recentScreenshots.isEmpty {
-            screenshotItems.append(TrayMenuItem(title: "No screenshots yet", icon: "photo", action: {}, isDisabled: true))
+            screenshotItems.append(TrayMenuItem(title: L10n.string("No screenshots yet"), icon: "photo", action: {}, isDisabled: true))
         } else {
             for record in recentScreenshots.prefix(8) {
                 screenshotItems.append(TrayMenuItem(title: record.displayName, icon: "photo") { [record] in
@@ -228,11 +228,11 @@ struct MenuBarContentView: View {
                 })
             }
         }
-        items.append(TrayMenuItem(title: "Screenshots", icon: "photo.on.rectangle", action: {}, submenu: screenshotItems))
+        items.append(TrayMenuItem(title: L10n.string("Screenshots"), icon: "photo.on.rectangle", action: {}, submenu: screenshotItems))
 
         var recordingItems: [TrayMenuItem] = []
         if recentRecordings.isEmpty {
-            recordingItems.append(TrayMenuItem(title: "No recordings yet", icon: "video", action: {}, isDisabled: true))
+            recordingItems.append(TrayMenuItem(title: L10n.string("No recordings yet"), icon: "video", action: {}, isDisabled: true))
         } else {
             for record in recentRecordings.prefix(8) {
                 recordingItems.append(TrayMenuItem(title: record.displayName, icon: "video") { [record] in
@@ -240,7 +240,7 @@ struct MenuBarContentView: View {
                 })
             }
         }
-        items.append(TrayMenuItem(title: "Recordings", icon: "video.circle", action: {}, submenu: recordingItems))
+        items.append(TrayMenuItem(title: L10n.string("Recordings"), icon: "video.circle", action: {}, submenu: recordingItems))
 
         return items
     }
@@ -253,7 +253,7 @@ struct MenuBarContentView: View {
         // captures stay visible until acted on, regardless of the capture timer.
         DispatchQueue.main.async {
             guard FileManager.default.fileExists(atPath: url.path) else {
-                ToastWindow.shared.show(isError: true, title: "Capture unavailable", message: "This file has been moved or deleted.", systemIcon: "exclamationmark.triangle", on: screen)
+                ToastWindow.shared.show(isError: true, title: L10n.string("Capture unavailable"), message: L10n.string("This file has been moved or deleted."), systemIcon: "exclamationmark.triangle", on: screen)
                 return
             }
             PreviewOverlay.shared.show(url: url, on: screen, automaticallyDismiss: false)
@@ -290,7 +290,7 @@ struct TrayGridButton: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 16)
 
-                Text(title)
+                Text(L10n.string(title))
                     .font(.system(size: 12, weight: .medium))
                     .fixedSize()
 
@@ -310,7 +310,7 @@ struct TrayGridButton: View {
         }
         .buttonStyle(TrayButtonStyle())
         .onHover { isHovered = $0 }
-        .accessibilityLabel(title)
+        .accessibilityLabel(L10n.string(title))
         .accessibilityValue(shortcut?.accessibilityDescription ?? "")
     }
 }
@@ -371,7 +371,7 @@ final class TrayGridMenuButton: NSView {
     private var trackingArea: NSTrackingArea?
 
     init(title: String, icon: String, menuItems: [TrayMenuItem]) {
-        self.titleText = title
+        self.titleText = L10n.string(title)
         self.iconName = icon
         self.menuItems = menuItems
         super.init(frame: .zero)
@@ -538,7 +538,7 @@ private struct TrayFullWidthButton: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 16)
 
-                Text(title)
+                Text(L10n.string(title))
                     .font(.system(size: 12, weight: .medium))
 
                 Spacer()

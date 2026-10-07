@@ -29,6 +29,7 @@ enum AppPreferences {
     private static let recordingMicrophoneDeviceIDKey = "bs_recordingMicrophoneDeviceID"
     private static let lastRegionRectKey = "bs_lastRegionRect"
     private static let captureRegionOnReleaseKey = "bs_captureRegionOnRelease"
+    private static let regionCaptureModeKey = "bs_regionCaptureMode"
 
     // MARK: - Appearance
     static var appearance: AppAppearance {
@@ -266,6 +267,15 @@ enum AppPreferences {
         set { UserDefaults.standard.set(newValue, forKey: captureRegionOnReleaseKey) }
     }
 
+    static var regionCaptureMode: RegionCaptureMode {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: regionCaptureModeKey),
+                  let mode = RegionCaptureMode(rawValue: raw) else { return .frozen }
+            return mode
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: regionCaptureModeKey) }
+    }
+
     // MARK: - History
     /// How many captures history keeps. 0 means unlimited.
     static var historyRetentionLimit: Int {
@@ -396,6 +406,21 @@ enum HistoryRetention: Int, CaseIterable, Identifiable {
 
     var label: String {
         self == .unlimited ? "Unlimited" : "\(rawValue) captures"
+    }
+}
+
+enum RegionCaptureMode: String, CaseIterable, Identifiable {
+    case frozen = "frozen"
+    // Keep the stored value for users who chose non-frozen selection.
+    case system = "system"
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .frozen: return NSLocalizedString("Freeze & Select", comment: "Frozen region screenshot mode")
+        case .system: return NSLocalizedString("Live Selection", comment: "Live region screenshot mode")
+        }
     }
 }
 

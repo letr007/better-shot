@@ -1,6 +1,7 @@
 import AppKit
 import Vision
 import CoreGraphics
+import ScreenCaptureKit
 
 @MainActor
 @Observable
@@ -58,6 +59,10 @@ final class ScreenCapture {
         isCapturing = true
         defer { isCapturing = false }
 
+        if AppPreferences.regionCaptureMode == .frozen {
+            return try await captureFrozenRegion()
+        }
+
         switch await RegionSelectionOverlay().selectRegion() {
         case .cancelled:
             return nil
@@ -65,6 +70,83 @@ final class ScreenCapture {
             return try await interactiveShot(window: true, includeShadow: false)
         case .region(let selection):
             return try await regionShot(selection.pointsRect)
+        }
+    }
+
+    /// Selection and cropping share the same snapshots; confirming never captures a later live frame.
+    private func captureFrozenRegion() async throws -> URL? {
+        guard CGPreflightScreenCaptureAccess() else {
+            _ = CGRequestScreenCaptureAccess()
+            throw FrozenCaptureError.permissionRequired
+        }
+        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        let excludedApps = PreviewWindowCaptureExclusion.includesAppWindowsInCaptures
+            ? [] : content.applications.filter { $0.processID == ProcessInfo.processInfo.processIdentifier }
+        let primaryHeight = CGDisplayBounds(CGMainDisplayID()).height
+        var frames: [CGDirectDisplayID: FrozenRegionFrame] = [:]
+        var backgrounds: [CGDirectDisplayID: NSImage] = [:]
+        for screen in NSScreen.screens {
+            guard let displayID = ActiveDisplayResolver.displayID(for: screen),
+                  let display = content.displays.first(where: { $0.displayID == displayID }) else {
+                throw FrozenCaptureError.displayUnavailable
+            }
+            let filter = SCContentFilter(display: display, excludingApplications: excludedApps, exceptingWindows: [])
+            let configuration = SCStreamConfiguration()
+            configuration.width = Int(screen.frame.width * CGFloat(filter.pointPixelScale))
+            configuration.height = Int(screen.frame.height * CGFloat(filter.pointPixelScale))
+            configuration.showsCursor = false
+            let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+            frames[displayID] = FrozenRegionFrame(
+                image: image,
+                displayRect: RegionGeometry.pointsRect(global: screen.frame, primaryHeight: primaryHeight)
+            )
+            backgrounds[displayID] = NSImage(cgImage: image, size: screen.frame.size)
+        }
+        guard !frames.isEmpty else { throw FrozenCaptureError.displayUnavailable }
+        switch await RegionSelectionOverlay().selectRegion(backgrounds: backgrounds) {
+        case .cancelled:
+            return nil
+        case .window:
+            return try await interactiveShot(window: true, includeShadow: false)
+        case .region(let selection):
+            guard let frame = frames[selection.displayID] else { throw FrozenCaptureError.displayUnavailable }
+            let image = try frame.crop(to: selection.pointsRect)
+            let url = URL(fileURLWithPath: makeTempPath())
+            guard let data = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else {
+                throw CocoaError(.fileWriteUnknown)
+            }
+            try data.write(to: url, options: .atomic)
+            return url
+        }
+    }
+
+    struct FrozenRegionFrame {
+        let image: CGImage
+        let displayRect: CGRect
+
+        func crop(to pointsRect: CGRect) throws -> CGImage {
+            guard let pixelRect = RegionGeometry.pixelRect(
+                pointsRect: pointsRect, displayRect: displayRect,
+                pixelSize: CGSize(width: image.width, height: image.height)
+            ), let cropped = image.cropping(to: pixelRect) else {
+                throw FrozenCaptureError.invalidRegion
+            }
+            return cropped
+        }
+    }
+
+    enum FrozenCaptureError: LocalizedError {
+        case permissionRequired, displayUnavailable, invalidRegion
+
+        var errorDescription: String? {
+            switch self {
+            case .permissionRequired:
+                return NSLocalizedString("Allow BetterShot in Screen & System Audio Recording in System Settings, then quit and reopen BetterShot.", comment: "Screen recording permission")
+            case .displayUnavailable:
+                return NSLocalizedString("The selected display is no longer available.", comment: "Frozen screenshot display unavailable")
+            case .invalidRegion:
+                return NSLocalizedString("Could not capture the selected area.", comment: "Invalid frozen screenshot region")
+            }
         }
     }
 
@@ -125,14 +207,11 @@ final class ScreenCapture {
 
     private func recognizeContent(in image: CGImage) async throws -> String {
         return try await withCheckedThrowingContinuation { continuation in
-            let textRequest = VNRecognizeTextRequest()
-            textRequest.recognitionLevel = .accurate
-            textRequest.usesLanguageCorrection = true
-
             let barcodeRequest = VNDetectBarcodesRequest()
 
             let handler = VNImageRequestHandler(cgImage: image)
             do {
+                let textRequest = try Self.textRecognitionRequest()
                 try handler.perform([textRequest, barcodeRequest])
 
                 var parts: [String] = []
@@ -161,6 +240,15 @@ final class ScreenCapture {
                 continuation.resume(throwing: error)
             }
         }
+    }
+
+    static func textRecognitionRequest() throws -> VNRecognizeTextRequest {
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
+        let supported = try request.supportedRecognitionLanguages()
+        request.recognitionLanguages = ["zh-Hans", "zh-Hant", "en-US"].filter(supported.contains)
+        return request
     }
 
     // MARK: - Sound

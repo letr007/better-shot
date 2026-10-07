@@ -1,0 +1,5 @@
+"NSScreenCaptureUsageDescription" = "BetterShot needs screen recording access to capture screenshots and record your screen.";
+"NSInputMonitoringUsageDescription" = "BetterShot uses input monitoring for precise pointer motion during recordings and, when enabled, shortcut and special-key overlays. Plain typing is never recorded.";
+"NSCameraUsageDescription" = "BetterShot shows your camera in a floating bubble when you turn on the face cam, so your face appears in the recording.";
+"NSMicrophoneUsageDescription" = "BetterShot uses your microphone when you start a voice screenshot or enable recording narration.";
+"NSSpeechRecognitionUsageDescription" = "BetterShot transcribes voice screenshots and recording captions on your Mac.";

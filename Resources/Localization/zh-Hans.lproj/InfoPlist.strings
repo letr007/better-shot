@@ -1,0 +1,5 @@
+"NSScreenCaptureUsageDescription" = "BetterShot 需要屏幕录制权限来截取屏幕截图和录制屏幕。";
+"NSInputMonitoringUsageDescription" = "BetterShot 使用输入监控精确记录录屏中的指针移动，并在启用时显示快捷键和特殊按键。不会记录普通文字输入。";
+"NSCameraUsageDescription" = "开启摄像头画面后，BetterShot 会在悬浮窗口中显示你的摄像头，并将画面加入录屏。";
+"NSMicrophoneUsageDescription" = "BetterShot 在你启动语音截图或开启录屏旁白时使用麦克风。";
+"NSSpeechRecognitionUsageDescription" = "BetterShot 在本机将语音截图和录屏语音转为文字。";

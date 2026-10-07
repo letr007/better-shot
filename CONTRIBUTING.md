@@ -166,9 +166,17 @@ changes and stops at page end, after repeated misses, or at the size limit. Run
 `BETTERSHOT_CHECK_CAPTURE_UI=1 bash Tests/run-exports.sh` after a test build to
 check stitching and the compact capture controls in both appearances.
 Region screenshots use `RegionSelectionOverlay` with the previous area
-(`AppPreferences.lastRegionRect`) preselected, so Return captures it again, then
-reactivate the previously frontmost app before `screencapture -R` takes the shot.
-OCR keeps macOS's native `/usr/sbin/screencapture -i` selector.
+(`AppPreferences.lastRegionRect`) preselected, so Return confirms it again.
+`AppPreferences.regionCaptureMode` uses the existing `bs_regionCaptureMode` key:
+`frozen` (the default) captures each display with ScreenCaptureKit before selection,
+and `system` keeps the adjustable selector live, then takes `screencapture -R` after
+restoring the frontmost app. Both modes share the selector; recording areas and
+scrolling capture stay live. Frozen selection crops its saved frame through
+`RegionGeometry.pixelRect`; never recapture after confirmation. Each background
+belongs to its display ID, and cropping preserves native pixels on mixed-DPI displays.
+Capture Previous Region takes a new live shot of the remembered rectangle.
+OCR keeps macOS's native `/usr/sbin/screencapture -i` selector and configures Vision
+for Simplified Chinese, Traditional Chinese, and English.
 Region screenshots always use BetterShot’s selector.
 `AppPreferences.captureRegionOnRelease`, exposed as Capture as soon as I let go
 in Settings > Capture > Region, chooses immediate capture on release or adjustment

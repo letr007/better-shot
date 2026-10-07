@@ -14,6 +14,21 @@ enum RegionGeometry {
         CGRect(x: global.minX, y: primaryHeight - global.maxY, width: global.width, height: global.height)
     }
 
+    /// Maps global top-left display points to the captured frame's pixels, rounding outwards.
+    static func pixelRect(pointsRect: CGRect, displayRect: CGRect, pixelSize: CGSize) -> CGRect? {
+        guard !displayRect.isEmpty, pixelSize.width > 0, pixelSize.height > 0 else { return nil }
+        let clipped = pointsRect.intersection(displayRect)
+        guard !clipped.isNull, !clipped.isEmpty else { return nil }
+        let scaleX = pixelSize.width / displayRect.width
+        let scaleY = pixelSize.height / displayRect.height
+        return CGRect(
+            x: (clipped.minX - displayRect.minX) * scaleX,
+            y: (clipped.minY - displayRect.minY) * scaleY,
+            width: clipped.width * scaleX,
+            height: clipped.height * scaleY
+        ).integral.intersection(CGRect(origin: .zero, size: pixelSize))
+    }
+
     static func screencaptureArgument(_ rect: CGRect) -> String {
         [rect.minX, rect.minY, rect.width, rect.height].map { String(Int($0.rounded())) }.joined(separator: ",")
     }

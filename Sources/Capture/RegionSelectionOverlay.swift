@@ -17,6 +17,7 @@ enum RegionSelectionOutcome {
 final class RegionSelectionOverlay {
 
     private var allowsWindowSelection = true
+    private var backgroundImages: [CGDirectDisplayID: NSImage]?
     private var controlScreen: NSScreen?
     private var onControlSelection: ((RegionSelectionOutcome) -> Void)?
 
@@ -45,8 +46,17 @@ final class RegionSelectionOverlay {
     private var previousApp: NSRunningApplication?
 
     /// Returns once the app that was frontmost is active again, so captures show its windows as focused.
-    func selectRegion(allowsWindowSelection: Bool = true) async -> RegionSelectionOutcome {
+    /// With backgrounds, only displays with a matching snapshot allow selection.
+    func selectRegion(
+        allowsWindowSelection: Bool = true,
+        backgrounds: [CGDirectDisplayID: NSImage]? = nil
+    ) async -> RegionSelectionOutcome {
+        if let backgrounds, !NSScreen.screens.contains(where: { screen in
+            ActiveDisplayResolver.displayID(for: screen).map { backgrounds[$0] != nil } ?? false
+        }) { return .cancelled }
         self.allowsWindowSelection = allowsWindowSelection
+        self.backgroundImages = backgrounds
+        defer { self.backgroundImages = nil }
         previousApp = NSWorkspace.shared.frontmostApplication.flatMap {
             $0.processIdentifier == ProcessInfo.processInfo.processIdentifier ? nil : $0
         }
@@ -66,7 +76,11 @@ final class RegionSelectionOverlay {
         let crosshair = NSCursor.crosshair
         let capturesOnRelease = controlScreen != nil || AppPreferences.captureRegionOnRelease
 
-        for screen in controlScreen.map({ [$0] }) ?? NSScreen.screens {
+        let screens = controlScreen.map({ [$0] }) ?? NSScreen.screens.filter { screen in
+            guard let backgroundImages else { return true }
+            return ActiveDisplayResolver.displayID(for: screen).map { backgroundImages[$0] != nil } ?? false
+        }
+        for screen in screens {
             let window = OverlayWindow(
                 contentRect: screen.frame,
                 styleMask: .borderless,
@@ -87,7 +101,8 @@ final class RegionSelectionOverlay {
                 screen: screen,
                 cursor: crosshair,
                 selection: previousRegion,
-                capturesOnRelease: capturesOnRelease
+                capturesOnRelease: capturesOnRelease,
+                backgroundImage: ActiveDisplayResolver.displayID(for: screen).flatMap { backgroundImages?[$0] }
             ) { [weak self] rect in
                 self?.finishSelection(rect: rect, screen: screen)
             } onCancel: { [weak self] in
@@ -174,6 +189,7 @@ private final class SelectionView: NSView {
     private let screen: NSScreen
     private let crosshairCursor: NSCursor
     private let capturesOnRelease: Bool
+    private let backgroundImage: NSImage?
     private let onSelect: (CGRect) -> Void
     private let onCancel: () -> Void
     private let onWindow: () -> Void
@@ -183,6 +199,7 @@ private final class SelectionView: NSView {
         cursor: NSCursor,
         selection: CGRect?,
         capturesOnRelease: Bool,
+        backgroundImage: NSImage?,
         onSelect: @escaping (CGRect) -> Void,
         onCancel: @escaping () -> Void,
         onWindow: @escaping () -> Void
@@ -192,6 +209,7 @@ private final class SelectionView: NSView {
         self.selection = selection
         self.movesSelection = selection == nil
         self.capturesOnRelease = capturesOnRelease
+        self.backgroundImage = backgroundImage
         self.onSelect = onSelect
         self.onCancel = onCancel
         self.onWindow = onWindow
@@ -238,6 +256,7 @@ private final class SelectionView: NSView {
     // MARK: - Drawing
 
     override func draw(_ dirtyRect: NSRect) {
+        if backgroundImage != nil { drawBackground(in: bounds) }
         NSColor.black.withAlphaComponent(0.3).setFill()
         bounds.fill()
 
@@ -247,6 +266,18 @@ private final class SelectionView: NSView {
             drawAdjustableSelection(selection)
         } else if let mouse = mouseLocation {
             drawGuideLines(at: mouse)
+        }
+    }
+
+    private func drawBackground(in rect: CGRect) {
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        NSBezierPath(rect: rect).addClip()
+        if let backgroundImage {
+            backgroundImage.draw(in: bounds, from: .zero, operation: .copy, fraction: 1)
+        } else {
+            NSColor.clear.setFill()
+            rect.fill(using: .copy)
         }
     }
 
@@ -272,8 +303,7 @@ private final class SelectionView: NSView {
         let selectionRect = rectFromPoints(start, current)
         guard selectionRect.width > 2, selectionRect.height > 2 else { return }
 
-        NSColor.clear.setFill()
-        selectionRect.fill(using: .copy)
+        drawBackground(in: selectionRect)
 
         NSColor.white.setStroke()
         let borderPath = NSBezierPath(rect: selectionRect)
@@ -284,8 +314,7 @@ private final class SelectionView: NSView {
     }
 
     private func drawAdjustableSelection(_ rect: CGRect) {
-        NSColor.clear.setFill()
-        rect.fill(using: .copy)
+        drawBackground(in: rect)
 
         NSColor.white.setStroke()
         let borderPath = NSBezierPath(rect: rect)
@@ -462,11 +491,13 @@ private final class SelectionView: NSView {
     }
 
     private func rectFromPoints(_ a: NSPoint, _ b: NSPoint) -> CGRect {
-        CGRect(
+        let rect = CGRect(
             x: min(a.x, b.x),
             y: min(a.y, b.y),
             width: abs(b.x - a.x),
             height: abs(b.y - a.y)
         )
+        // Frozen selections belong to one saved display frame, including when a drag crosses screens.
+        return backgroundImage == nil ? rect : rect.intersection(bounds)
     }
 }

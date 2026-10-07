@@ -37,6 +37,7 @@ final class ShortcutService {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        Self.migrateLocalCaptureShortcuts(defaults: defaults)
         Self.migrateCaptureShortcuts(defaults: defaults)
         Self.migratePreviousRegionDefault(defaults: defaults)
     }
@@ -138,6 +139,28 @@ final class ShortcutService {
         let key = "bs_hotkey_\(action.rawValue)"
         guard let data = defaults.data(forKey: key) else { return nil }
         return try? JSONDecoder().decode(Shortcut.self, from: data)
+    }
+
+    /// The local frozen-capture build used ID 7 for scrolling; upstream reserves it for recording options.
+    static func migrateLocalCaptureShortcuts(defaults: UserDefaults = .standard) {
+        guard defaults.object(forKey: "bs_regionCaptureMode") != nil,
+              !defaults.bool(forKey: "bs_captureShortcuts050Restored") else { return }
+        let optionsKey = "bs_hotkey_\(Action.recordingOptions.rawValue)"
+        let scrollKey = "bs_hotkey_\(Action.scrollCapture.rawValue)"
+        if let data = defaults.data(forKey: optionsKey),
+           (try? JSONDecoder().decode(Shortcut.self, from: data)) != nil {
+            if defaults.data(forKey: scrollKey) == nil { defaults.set(data, forKey: scrollKey) }
+            defaults.removeObject(forKey: optionsKey)
+        }
+        // Keep an existing window binding instead of giving recording options the same key.
+        if defaults.data(forKey: optionsKey) == nil,
+           let data = defaults.data(forKey: "bs_hotkey_\(Action.window.rawValue)"),
+           let window = try? JSONDecoder().decode(Shortcut.self, from: data), window.enabled,
+           window.keyCode == Shortcut.defaultRecordingOptions.keyCode,
+           window.modifiers == Shortcut.defaultRecordingOptions.modifiers,
+           let disabled = try? JSONEncoder().encode(Shortcut(keyCode: .max, modifiers: 0, enabled: false)) {
+            defaults.set(disabled, forKey: optionsKey)
+        }
     }
 
     /// Move only the old defaults; preserve custom combinations and disabled shortcuts.

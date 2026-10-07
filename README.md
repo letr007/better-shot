@@ -103,10 +103,14 @@ Capture Region & Pin or Edit Clipboard Image, start unassigned.
 Set the background, padding, corner radius, and shadow for new captures in
 **Settings > General > Default Look**.
 
-Region screenshots use BetterShot’s adjustable selector. Enable
-**Settings > Capture > Region > Capture as soon as I let go** to capture on mouse
-release, or leave it off to adjust the area before confirming. Window screenshots
-and OCR use the native macOS selectors.
+Region screenshots use BetterShot’s adjustable selector. In
+**Settings > Capture > Region**, **Freeze & Select** captures the displays before
+selection and saves the selected pixels from that frozen image. **Live Selection**
+keeps the displays live and captures after confirmation. Both modes remember the
+last area and support adjustment. Enable **Capture as soon as I let go** to confirm
+on mouse release. Window screenshots and OCR use the native macOS selectors.
+OCR recognizes Simplified Chinese, Traditional Chinese, and English. The menu
+and Settings follow the system language, including Simplified Chinese.
 
 Saved previews dismiss after **Settings > Overlay > Hide After**, pausing while
 you use the card. **Keep screenshot previews open** holds only unsaved captures;

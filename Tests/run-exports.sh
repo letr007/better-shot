@@ -40,6 +40,13 @@ if [[ "${BETTERSHOT_CHECK_EDITOR_SCENES:-0}" == "1" ]]; then
     exit 0
 fi
 swiftc -parse-as-library -module-cache-path .build/ExportCheckModules \
+    -I "$derived/Build/Products/$configuration" Tests/LocalCaptureIntegration.swift \
+    "${objects[@]}" "$derived/Build/Products/$configuration/DockProgress.o" "$derived/Build/Products/$configuration/TourKit.o" \
+    -o "$out/LocalCaptureIntegration"
+BETTERSHOT_TESTING=1 "$out/LocalCaptureIntegration"
+if [[ "${BETTERSHOT_CHECK_LOCAL_CAPTURE:-0}" == "1" ]]; then exit 0; fi
+
+swiftc -parse-as-library -module-cache-path .build/ExportCheckModules \
     -I "$derived/Build/Products/$configuration" Tests/ExportIntegration.swift Tests/EditorUIIntegration.swift Tests/ImageTransformIntegration.swift Tests/Recording3DIntegration.swift \
     "${objects[@]}" "$derived/Build/Products/$configuration/DockProgress.o" "$derived/Build/Products/$configuration/TourKit.o" \
     -o "$out/ExportIntegration"

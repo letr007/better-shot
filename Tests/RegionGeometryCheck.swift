@@ -14,6 +14,29 @@ enum RegionGeometryCheck {
 
         precondition(RegionGeometry.screencaptureArgument(CGRect(x: 10.4, y: 830.6, width: 100, height: 50)) == "10,831,100,50")
 
+        let displayPoints = RegionGeometry.pointsRect(global: secondScreen, primaryHeight: 900)
+        let retinaSize = CGSize(width: 3840, height: 2160)
+        let cropPoints = RegionGeometry.pointsRect(global: global, primaryHeight: 900)
+        precondition(RegionGeometry.pixelRect(pointsRect: cropPoints, displayRect: displayPoints, pixelSize: retinaSize)
+            == CGRect(x: 200, y: 1660, width: 600, height: 400), "secondary display crop uses display-local top-left pixels")
+        precondition(RegionGeometry.pixelRect(pointsRect: displayPoints, displayRect: displayPoints, pixelSize: retinaSize)
+            == CGRect(origin: .zero, size: retinaSize), "full display keeps native pixel dimensions")
+        let aboveScreen = CGRect(x: -1200, y: 900, width: 1200, height: 800)
+        let abovePoints = RegionGeometry.pointsRect(global: aboveScreen, primaryHeight: 900)
+        precondition(RegionGeometry.pixelRect(pointsRect: CGRect(x: -1180, y: -790, width: 100, height: 50),
+            displayRect: abovePoints, pixelSize: CGSize(width: 1200, height: 800))
+            == CGRect(x: 20, y: 10, width: 100, height: 50), "negative display origins map without a primary-screen offset")
+        precondition(RegionGeometry.pixelRect(pointsRect: CGRect(x: 0.25, y: 0.25, width: 10.25, height: 5.5),
+            displayRect: CGRect(x: 0, y: 0, width: 100, height: 100), pixelSize: CGSize(width: 200, height: 200))
+            == CGRect(x: 0, y: 0, width: 21, height: 12), "fractional selections round outwards")
+        precondition(RegionGeometry.pixelRect(pointsRect: CGRect(x: -10, y: 90, width: 30, height: 30),
+            displayRect: CGRect(x: 0, y: 0, width: 100, height: 100), pixelSize: CGSize(width: 200, height: 200))
+            == CGRect(x: 0, y: 180, width: 40, height: 20), "cropping clamps to captured pixels")
+        precondition(RegionGeometry.pixelRect(pointsRect: CGRect(x: 110, y: 0, width: 10, height: 10),
+            displayRect: CGRect(x: 0, y: 0, width: 100, height: 100), pixelSize: CGSize(width: 200, height: 200)) == nil)
+        precondition(RegionGeometry.pixelRect(pointsRect: .zero, displayRect: displayPoints, pixelSize: retinaSize) == nil)
+        precondition(RegionGeometry.pixelRect(pointsRect: displayPoints, displayRect: .zero, pixelSize: retinaSize) == nil)
+
         let sel = CGRect(x: 100, y: 100, width: 200, height: 100)
         let screen = CGRect(x: 0, y: 0, width: 1000, height: 800)
         precondition(RegionAdjustment.handle(at: CGPoint(x: 303, y: 197), in: sel) == .topRight, "near a corner picks that corner")

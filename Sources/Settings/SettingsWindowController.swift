@@ -15,9 +15,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         if let existing = window, existing.isVisible {
             if let section {
                 existing.contentViewController = NSHostingController(rootView: PreferencesView(selection: section) { [weak existing] in
-                    existing?.title = $0.title
+                    existing?.title = L10n.string($0.title)
                 })
-                existing.title = section.title
+                existing.title = L10n.string(section.title)
             }
             existing.orderFrontRegardless()
             NSApp.activate(ignoringOtherApps: true)
@@ -26,7 +26,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         }
 
         let controller = NSHostingController(rootView: PreferencesView(selection: section ?? .general) { [weak self] in
-            self?.window?.title = $0.title
+            self?.window?.title = L10n.string($0.title)
         })
 
         let win = NSWindow(contentViewController: controller)
@@ -35,7 +35,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         win.minSize = NSSize(width: 780, height: 620)
         win.titlebarAppearsTransparent = true
         win.toolbarStyle = .unified
-        win.title = (section ?? .general).title
+        win.title = L10n.string((section ?? .general).title)
         win.isReleasedWhenClosed = false
         win.delegate = self
         win.collectionBehavior = [.transient, .moveToActiveSpace]

@@ -100,10 +100,10 @@ final class BetterShotDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "A screen recording is still in progress"
-        alert.informativeText = "BetterShot will finish and save the recording before quitting. This can take a moment for a long recording."
-        alert.addButton(withTitle: "Cancel")
-        alert.addButton(withTitle: "Finish Recording and Quit")
+        alert.messageText = L10n.string("A screen recording is still in progress")
+        alert.informativeText = L10n.string("BetterShot will finish and save the recording before quitting. This can take a moment for a long recording.")
+        alert.addButton(withTitle: L10n.string("Cancel"))
+        alert.addButton(withTitle: L10n.string("Finish Recording and Quit"))
 
         guard alert.runModal() == .alertSecondButtonReturn else {
             return .terminateCancel
@@ -138,11 +138,11 @@ final class BetterShotDelegate: NSObject, NSApplicationDelegate {
 
     private static func promptRestart() {
         let alert = NSAlert()
-        alert.messageText = "Restart Required"
-        alert.informativeText = "BetterShot needs to restart to activate keyboard shortcut overrides. Restart now?"
+        alert.messageText = L10n.string("Restart Required")
+        alert.informativeText = L10n.string("BetterShot needs to restart to activate keyboard shortcut overrides. Restart now?")
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "Restart")
-        alert.addButton(withTitle: "Later")
+        alert.addButton(withTitle: L10n.string("Restart"))
+        alert.addButton(withTitle: L10n.string("Later"))
 
         if alert.runModal() == .alertFirstButtonReturn {
             let task = Process()
